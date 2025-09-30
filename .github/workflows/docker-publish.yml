@@ -1,4 +1,4 @@
-name: Docker
+name: Docker Build/Publish latest
 
 # This workflow uses actions that are not certified by GitHub.
 # They are provided by a third-party and are governed by
@@ -7,13 +7,13 @@ name: Docker
 
 on:
   schedule:
-    - cron: '20 14 * * *'
+    - cron: '22 18 * * *'
   push:
-    branches: [ "main" ]
+    branches: [ "latest" ]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "latest" ]
 
 env:
   # Use docker.io for Docker Hub if empty
