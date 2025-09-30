@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #1a202c; color: #e2e8f0; }
+        .card { background-color: #2d3748; }
+        .btn { transition: background-color 0.2s; }
+        .btn-delete { background-color: #e53e3e; }
+        .btn-delete:hover { background-color: #c53030; }
+        .btn-primary { background-color: #4299e1; }
+        .btn-primary:hover { background-color: #3182ce; }
+        input { background-color: #4a5568; }
+        .error-msg { background-color: #c53030; color: white; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-4xl font-bold mb-6 text-center">Recently Added Manager</h1>
+
+        <!-- Configuration -->
+        <div id="config-card" class="card p-6 rounded-lg shadow-lg mb-8">
+            <div class="flex justify-between items-center">
+                <h2 class="text-2xl font-semibold">Tautulli - Recently Added</h2>
+                <div class="flex items-center space-x-4">
+                    <label for="library-selector" class="font-semibold">Select Library:</label>
+                    <div id="library-selector" class="flex flex-wrap gap-x-4 gap-y-2 p-2 rounded" style="background-color: #4a5568;"><p>-- Loading Libraries --</p></div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <label class="font-semibold">Date Format:</label>
+                    <div id="date-format-selector" class="flex flex-wrap gap-x-4 gap-y-2 p-2 rounded" style="background-color: #4a5568;">
+                        <div class="flex items-center">
+                            <input type="radio" id="format-datetime" name="date-format" value="datetime" class="mr-2" checked>
+                            <label for="format-datetime">Date & Time</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="radio" id="format-relative" name="date-format" value="relative" class="mr-2">
+                            <label for="format-relative">Relative</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="radio" id="format-short" name="date-format" value="short" class="mr-2">
+                            <label for="format-short">Sep 28</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Display -->
+        <div id="loading" class="text-center my-8 hidden">
+            <p class="text-xl">Loading...</p>
+        </div>
+        <div id="results" class="space-y-3"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const librarySelector = document.getElementById('library-selector');
+            const loadingDiv = document.getElementById('loading');
+            const resultsDiv = document.getElementById('results');
+
+            const populateLibraries = async () => {
+                try {
+                    const response = await fetch('/api/libraries');
+                    const libraries = await response.json();
+                    librarySelector.innerHTML = ''; // Clear loading message
+                    libraries.forEach(lib => {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'flex items-center';
+                        wrapper.innerHTML = `
+                            <input type="checkbox" id="lib-${lib.section_id}" name="library-selection" value="${lib.section_id}" class="mr-2" checked>
+                            <label for="lib-${lib.section_id}">${lib.section_name}</label>
+                        `;
+                        librarySelector.appendChild(wrapper);
+                    });
+                    // After populating and checking all libraries, trigger the initial data load.
+                    fetchData();
+                } catch (error) {
+                    librarySelector.innerHTML = '<p class="text-red-400">-- Error Loading Libraries --</p>';
+                    console.error("Failed to load libraries", error);
+                }
+            };
+
+            const fetchData = async () => {
+                const selectedCheckboxes = document.querySelectorAll('input[name="library-selection"]:checked');
+                const sectionIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+                if (sectionIds.length === 0) {
+                    resultsDiv.innerHTML = ''; // Clear results if no library is selected
+                    return;
+                }
+
+                loadingDiv.classList.remove('hidden');
+                resultsDiv.innerHTML = '';
+
+                try {
+                    const response = await fetch(`/api/data?section_id=${sectionIds.join(',')}`);
+                    const data = await response.json();
+                    renderItems(data);
+
+                } catch (error) {
+                    console.error('Error fetching data:', error);
+                    alert('Failed to fetch data. Check console for details.');
+                } finally {
+                    loadingDiv.classList.add('hidden');
+                }
+            };
+
+            const formatTimestamp = (timestamp) => {
+                const selectedFormat = document.querySelector('input[name="date-format"]:checked').value;
+                const date = new Date(timestamp * 1000);
+
+                if (selectedFormat === 'relative') {
+                    const now = new Date();
+                    const seconds = Math.floor((now - date) / 1000);
+                    let interval = seconds / 31536000;
+                    if (interval > 1) return Math.floor(interval) + " years ago";
+                    interval = seconds / 2592000;
+                    if (interval > 1) return Math.floor(interval) + " months ago";
+                    interval = seconds / 86400;
+                    if (interval > 1) return Math.floor(interval) + " days ago";
+                    interval = seconds / 3600;
+                    if (interval > 1) return Math.floor(interval) + " hours ago";
+                    interval = seconds / 60;
+                    if (interval > 1) return Math.floor(interval) + " minutes ago";
+                    return Math.floor(seconds) + " seconds ago";
+                }
+
+                if (selectedFormat === 'short') {
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }
+
+                // Default to 'datetime' format
+                return date.toLocaleString();
+            };
+
+            const renderItems = (items) => {
+                if (items.error) {
+                    resultsDiv.innerHTML = `<div class="card error-msg p-3 rounded-lg">${items.error}</div>`;
+                    return;
+                }
+                if (!items.data || Object.keys(items.data).length === 0) {
+                    resultsDiv.innerHTML = '<p>No recently added items found for this library.</p>';
+                    return;
+                }
+
+                let allLibrariesHtml = '';
+                // Sort library names alphabetically for consistent order
+                const sortedLibraryNames = Object.keys(items.data).sort();
+
+                for (const libraryName of sortedLibraryNames) {
+                    const libraryItems = items.data[libraryName];
+                    allLibrariesHtml += `<div class="mb-8">`;
+                    allLibrariesHtml += `<h2 class="text-2xl font-semibold mb-4">${libraryName}</h2>`;
+                    allLibrariesHtml += `<div class="space-y-3">`;
+                    if (libraryItems && libraryItems.length > 0) {
+                        libraryItems.forEach(item => {
+                            // The 'Remove' button and its logic have been removed.
+                            allLibrariesHtml += `<div class="card p-3 rounded-lg" id="tautulli-item-${item.id || Math.random()}">
+                                <div><p class="font-bold">${item.title} (${item.year})</p><p class="text-sm text-gray-400">Added: ${formatTimestamp(item.added_at)}</p></div>
+                            </div>`;
+                        });
+                    } else {
+                        allLibrariesHtml += `<p class="text-gray-400">No recently added items found.</p>`;
+                    }
+                    allLibrariesHtml += `</div></div>`;
+                }
+                resultsDiv.innerHTML = allLibrariesHtml;
+            };
+
+            const handleSelectionChange = (event) => {
+                if (event.target.name === 'library-selection' || event.target.name === 'date-format') fetchData();
+            };
+
+            document.getElementById('config-card').addEventListener('change', handleSelectionChange);
+
+            // Populate the library dropdown when the page loads
+            populateLibraries();
+        });
+    </script>
+</body>
+</html>
