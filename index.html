@@ -23,7 +23,7 @@
 
         <!-- Configuration -->
         <div id="config-card" class="card p-6 rounded-lg shadow-lg mb-8">
-            <div class="flex justify-between items-center">
+            <div class="flex justify-between items-start">
                 <h2 class="text-2xl font-semibold">Tautulli - Recently Added</h2>
                 <div class="flex items-center space-x-4">
                     <label for="library-selector" class="font-semibold">Select Library:</label>
@@ -46,6 +46,7 @@
                         </div>
                     </div>
                 </div>
+                <div id="app-version" class="text-xs text-gray-400 self-end"></div>
             </div>
         </div>
 
@@ -61,6 +62,17 @@
             const librarySelector = document.getElementById('library-selector');
             const loadingDiv = document.getElementById('loading');
             const resultsDiv = document.getElementById('results');
+            const versionDiv = document.getElementById('app-version');
+
+            const fetchVersion = async () => {
+                try {
+                    const response = await fetch('/api/version');
+                    const data = await response.json();
+                    versionDiv.textContent = `v${data.version}`;
+                } catch (e) {
+                    versionDiv.textContent = 'v-unknown';
+                }
+            };
 
             const populateLibraries = async () => {
                 try {
@@ -179,6 +191,7 @@
 
             // Populate the library dropdown when the page loads
             populateLibraries();
+            fetchVersion();
         });
     </script>
 </body>

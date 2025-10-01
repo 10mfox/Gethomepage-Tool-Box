@@ -1,6 +1,9 @@
 # Use an official Python runtime as a parent image
 FROM python:3.11-slim
 
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}
+
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
@@ -14,4 +17,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run the application using Gunicorn
-CMD ["gunicorn", "--config", "gunicorn.conf.py", "--bind", "0.0.0.0:5000", "--workers", "1", "--preload", "app:app"]
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app", "--bind", "0.0.0.0:5000"]
