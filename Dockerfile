@@ -1,8 +1,8 @@
 # Use an official Python runtime as a parent image
 FROM python:3.11-slim
 
-ARG APP_VERSION=dev
-ENV APP_VERSION=${APP_VERSION}
+ARG VERSION=dev
+ENV VERSION=${VERSION}
 
 # Set the working directory in the container
 WORKDIR /usr/src/app
