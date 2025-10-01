@@ -4,6 +4,7 @@ from flask import Flask, render_template, request, jsonify
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import logging
 import time
 
 app = Flask(__name__, template_folder='.')
@@ -12,6 +13,8 @@ app = Flask(__name__, template_folder='.')
 TAUTULLI_URL = os.environ.get('TAUTULLI_URL')
 TAUTULLI_API_KEY = os.environ.get('TAUTULLI_API_KEY')
 VERSION = os.environ.get('VERSION', 'dev')
+
+log = logging.getLogger(__name__)
 
 # --- Tautulli Functions ---
 def _process_tautulli_items(items, history_map):
@@ -68,7 +71,8 @@ def get_libraries():
         libraries = response.json().get('response', {}).get('data', [])
         return jsonify(libraries)
     except Exception as e:
-        return jsonify({"error": str(e)}), 502
+        log.error(f"Failed to fetch Tautulli libraries: {e}")
+        return jsonify({"error": "Failed to communicate with Tautulli."}), 502
 
 @app.route('/api/data', methods=['GET'])
 def get_data():
@@ -90,7 +94,8 @@ def get_data():
         libraries = libs_response.json().get('response', {}).get('data', [])
         library_map = {str(lib['section_id']): lib['section_name'] for lib in libraries}
     except Exception as e:
-        return jsonify({"error": f"Failed to fetch library list: {e}"}), 502
+        log.error(f"Failed to fetch library list for /api/data: {e}")
+        return jsonify({"error": "Failed to fetch library list from Tautulli."}), 502
 
     # --- Efficient Data Fetching ---
     # 1. Fetch history ONCE for all selected libraries.
@@ -101,7 +106,8 @@ def get_data():
         history_data = history_response.json().get('response', {}).get('data', {}).get('data', [])
         history_map = {str(item.get('rating_key')): item.get('history_id') for item in history_data if item.get('rating_key') and item.get('history_id')}
     except Exception as e:
-        return jsonify({"error": f"Failed to fetch Tautulli history: {e}"}), 502
+        log.error(f"Failed to fetch Tautulli history: {e}")
+        return jsonify({"error": "Failed to fetch history from Tautulli."}), 502
 
     section_ids = section_ids_str.split(',')
     data_by_library = {}
@@ -172,10 +178,10 @@ def _fetch_all_data_concurrently():
             response = requests.get(f"{TAUTULLI_URL}/api/v2", params=params)
             response.raise_for_status()
             items = response.json().get('response', {}).get('data', {}).get('recently_added', [])
-            return library['section_name'], items
+            return library.get('section_name'), items
         except Exception as e:
-            print(f"Error fetching for library {library['section_name']}: {e}")
-            return library['section_name'], []
+            log.warning(f"Error fetching recently added for library {library.get('section_name')}: {e}")
+            return library.get('section_name'), []
 
     # 2. Fetch all 'recently_added' data concurrently
     with ThreadPoolExecutor(max_workers=10) as executor:
@@ -201,7 +207,7 @@ def _get_library_state():
         # Create a state signature from library counts
         return {str(lib['section_id']): lib.get('count', 0) for lib in libraries}
     except Exception as e:
-        print(f"State check: Could not fetch library state: {e}")
+        log.warning(f"State check: Could not fetch library state: {e}")
         return None
 
 def update_cache_in_background(initial_state):
@@ -213,16 +219,16 @@ def update_cache_in_background(initial_state):
     while True:
         current_state = _get_library_state()
         if current_state and current_state != last_state:
-            print("Change detected. Refreshing Tautulli data cache...")
+            log.info("Change detected. Refreshing Tautulli data cache...")
             try:
                 data = _fetch_all_data_concurrently()
                 with _cache_lock:
                     _all_data_cache["data"] = data
                     _all_data_cache["timestamp"] = time.time()
                 last_state = current_state
-                print("Cache refresh successful.")
+                log.info("Cache refresh successful.")
             except Exception as e:
-                print(f"Error refreshing cache: {e}")
+                log.error(f"Error refreshing cache: {e}")
         time.sleep(POLL_INTERVAL_SECONDS)
 
 @app.route('/api/all_data', methods=['GET'])
