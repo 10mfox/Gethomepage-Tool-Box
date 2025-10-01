@@ -11,6 +11,7 @@ app = Flask(__name__, template_folder='.')
 # Read configuration from environment variables
 TAUTULLI_URL = os.environ.get('TAUTULLI_URL')
 TAUTULLI_API_KEY = os.environ.get('TAUTULLI_API_KEY')
+APP_VERSION = os.environ.get('APP_VERSION', 'dev')
 
 # --- Tautulli Functions ---
 def _process_tautulli_items(items, history_map):
@@ -48,6 +49,11 @@ def _process_tautulli_items(items, history_map):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/api/version')
+def get_version():
+    """Returns the application version."""
+    return jsonify({"version": APP_VERSION})
 
 @app.route('/api/libraries', methods=['GET'])
 def get_libraries():
