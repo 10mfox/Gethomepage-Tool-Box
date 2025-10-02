@@ -11,6 +11,7 @@ A simple, fast, and efficient web-based tool to view the "Recently Added" media 
 
 ## In Progress
 - [ ] Trying Too Speedup Api Without High Cpu Usage From This Container Or The Source Container Right Now It Is Very Slow And High Cpu Usage
+- [ ] Add Swagger Api Endpoint For Api Documentation
 
 ## Planned
 - [ ] Add Audiobookshelf Support
