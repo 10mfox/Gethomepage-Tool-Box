@@ -12,12 +12,56 @@ app = Flask(__name__, template_folder='.')
 # Read configuration from environment variables
 TAUTULLI_URL = os.environ.get('TAUTULLI_URL')
 TAUTULLI_API_KEY = os.environ.get('TAUTULLI_API_KEY')
+JELLYSTAT_URL = os.environ.get('JELLYSTAT_URL')
+JELLYSTAT_API_KEY = os.environ.get('JELLYSTAT_API_KEY')
+JELLYSTAT_CONTAINER_NAME = os.environ.get('JELLYSTAT_CONTAINER_NAME')
 VERSION = os.environ.get('VERSION', 'dev')
 
 log = logging.getLogger(__name__)
 
-# --- Tautulli Functions ---
-def _process_tautulli_items(items, history_map):
+# --- Jellystat Functions ---
+def _get_jellystat_headers():
+    """Returns headers for Jellystat API requests."""
+    return {"x-api-token": JELLYSTAT_API_KEY}
+
+def _get_jellystat_base_url():
+    """Returns the appropriate Jellystat URL for API calls."""
+    # Prefer direct container-to-container communication if a container name is provided.
+    if JELLYSTAT_CONTAINER_NAME:
+        return f"http://{JELLYSTAT_CONTAINER_NAME}:8080" # Jellystat's default internal port is 8080
+    return JELLYSTAT_URL
+
+def _process_jellystat_items(items):
+    """Helper function to process raw Jellystat items into a consistent format."""
+    processed_items = []
+    for item in items:
+        display_title = item.get('Name', 'Unknown Title')
+        if item.get('Type') == 'Episode':
+            show_name = item.get('SeriesName', '')
+            season_name = item.get('SeasonName', '')
+            if show_name:
+                display_title = f"{show_name} - {season_name} - {display_title}"
+        elif item.get('Type') == 'Audio':
+            artist_name = ', '.join(item.get('Artists', []))
+            album_name = item.get('Album', '')
+            if artist_name and album_name:
+                display_title = f"{artist_name} - {album_name}"
+
+        # Jellystat provides date as a string 'YYYY-MM-DDTHH:MM:SSZ'
+        added_at_str = item.get('DateCreated')
+        added_at_ts = 0
+        if added_at_str:
+            added_at_ts = int(datetime.strptime(added_at_str.split('.')[0], '%Y-%m-%dT%H:%M:%S').timestamp())
+
+        processed_items.append({
+            'title': display_title,
+            'year': item.get('ProductionYear', ''),
+            'added_at': added_at_ts
+        })
+    return processed_items
+
+# --- Tautulli Functions (Modified for clarity) ---
+def _process_tautulli_items(items, history_map={}):
     """
     Helper function to process raw Tautulli items: formats titles and adds history IDs.
     This function performs no network requests.
@@ -47,6 +91,43 @@ def _process_tautulli_items(items, history_map):
         })
     return processed_items
 
+def _format_dates_in_response(data, date_format, now):
+    """
+    Helper to format 'added_at' timestamps in a data response object.
+    This function mutates the data object.
+    """
+    if not date_format or not data:
+        return
+
+    for library_name, library_data in data.items():
+        for item in library_data.get('items', []):
+            if 'added_at' in item and isinstance(item['added_at'], int):
+                timestamp = item['added_at']
+                if date_format == 'short':
+                    item['added_at'] = datetime.fromtimestamp(timestamp).strftime('%b %d')
+                elif date_format == 'relative':
+                    seconds = int(now - timestamp)
+                    if seconds < 60:
+                        item['added_at'] = f"{seconds} seconds ago"
+                    elif seconds < 3600:
+                        item['added_at'] = f"{seconds // 60} minutes ago"
+                    elif seconds < 86400:
+                        item['added_at'] = f"{seconds // 3600} hours ago"
+                    elif seconds < 2592000: # 30 days
+                        item['added_at'] = f"{seconds // 86400} days ago"
+                    elif seconds < 31536000: # 365 days
+                        item['added_at'] = f"{seconds // 2592000} months ago"
+                    else:
+                        item['added_at'] = f"{seconds // 31536000} years ago"
+
+def _get_date_format_from_request():
+    """
+    Reads and validates the 'dateFormat' query parameter from the request.
+    """
+    date_format = request.args.get('dateFormat')
+    if date_format in ['short', 'relative']:
+        return date_format
+    return None
 
 # --- Flask Routes ---
 @app.route('/')
@@ -58,8 +139,19 @@ def get_version():
     """Returns the application version."""
     return jsonify({"version": VERSION})
 
-@app.route('/api/libraries', methods=['GET'])
-def get_libraries():
+@app.route('/api/sources', methods=['GET'])
+def get_sources():
+    """Returns a list of configured data sources (Tautulli, Jellystat, etc.)."""
+    sources = []
+    if TAUTULLI_URL and TAUTULLI_API_KEY:
+        sources.append({"id": "tautulli", "name": "Tautulli"})
+    if JELLYSTAT_URL and JELLYSTAT_API_KEY:
+        sources.append({"id": "jellystat", "name": "Jellystat"})
+    return jsonify(sources)
+
+# --- Tautulli Endpoints ---
+@app.route('/api/tautulli/libraries', methods=['GET'])
+def get_tautulli_libraries():
     """Fetches the list of Tautulli libraries."""
     if not TAUTULLI_URL or not TAUTULLI_API_KEY:
         return jsonify({"error": "Tautulli is not configured on the server."}), 500
@@ -68,19 +160,37 @@ def get_libraries():
         params = {"apikey": TAUTULLI_API_KEY, "cmd": "get_libraries"}
         response = requests.get(f"{TAUTULLI_URL}/api/v2", params=params)
         response.raise_for_status()
-        libraries = response.json().get('response', {}).get('data', [])
+        raw_libraries = response.json().get('response', {}).get('data', [])
+        
+        libraries = []
+        for lib in raw_libraries:
+            counts = {}
+            section_type = lib.get('section_type')
+            if section_type == 'show':
+                counts['Shows'] = lib.get('count')
+                counts['Seasons'] = lib.get('parent_count')
+                counts['Episodes'] = lib.get('child_count')
+            elif section_type == 'movie':
+                counts['Movies'] = lib.get('count')
+            elif section_type == 'artist':
+                counts['Artists'] = lib.get('count')
+                counts['Albums'] = lib.get('parent_count')
+
+            libraries.append({
+                "section_id": lib.get("section_id"),
+                "section_name": lib.get("section_name"),
+                "counts": counts,
+                "section_type": section_type
+            })
         return jsonify(libraries)
     except Exception as e:
         log.error(f"Failed to fetch Tautulli libraries: {e}")
         return jsonify({"error": "Failed to communicate with Tautulli."}), 502
 
-@app.route('/api/data', methods=['GET'])
-def get_data():
-    """Fetches recently added data for one or more library sections."""
+@app.route('/api/tautulli/data', methods=['GET'])
+def get_tautulli_data():
+    """Fetches Tautulli recently added data for one or more library sections."""
     section_ids_str = request.args.get('section_id')
-    if not section_ids_str:
-        return jsonify({"error": "Missing required query parameter: 'section_id'"}), 400
-
     if not TAUTULLI_URL or not TAUTULLI_API_KEY:
         return jsonify({
             'data': None, 'error': 'Tautulli URL or API Key is not configured on the server.'
@@ -92,10 +202,31 @@ def get_data():
         libs_response = requests.get(f"{TAUTULLI_URL}/api/v2", params=libs_params)
         libs_response.raise_for_status()
         libraries = libs_response.json().get('response', {}).get('data', [])
-        library_map = {str(lib['section_id']): lib['section_name'] for lib in libraries}
+        
+        library_info = {
+            str(lib['section_id']): {
+                'name': lib['section_name'],
+                'counts': (
+                    {'Shows': lib.get('count'), 'Seasons': lib.get('parent_count'), 'Episodes': lib.get('child_count')}
+                    if lib.get('section_type') == 'show'
+                    else {'Movies': lib.get('count')}
+                    if lib.get('section_type') == 'movie'
+                    else {'Artists': lib.get('count'), 'Albums': lib.get('parent_count')}
+                    if lib.get('section_type') == 'artist'
+                    else {}
+                )
+            }
+            for lib in libraries
+        }
     except Exception as e:
         log.error(f"Failed to fetch library list for /api/data: {e}")
         return jsonify({"error": "Failed to fetch library list from Tautulli."}), 502
+
+    # If no section_id is provided, default to all libraries.
+    if not section_ids_str:
+        section_ids = list(library_info.keys())
+    else:
+        section_ids = section_ids_str.split(',')
 
     # --- Efficient Data Fetching ---
     # 1. Fetch history ONCE for all selected libraries.
@@ -109,7 +240,6 @@ def get_data():
         log.error(f"Failed to fetch Tautulli history: {e}")
         return jsonify({"error": "Failed to fetch history from Tautulli."}), 502
 
-    section_ids = section_ids_str.split(',')
     data_by_library = {}
     first_error = None
 
@@ -123,17 +253,160 @@ def get_data():
             
             processed_items = _process_tautulli_items(raw_items, history_map)
             
-            library_name = library_map.get(section_id)
-            if library_name:
-                data_by_library[library_name] = processed_items
+            lib_info = library_info.get(section_id)
+            if lib_info and lib_info.get('name'):
+                data_by_library[lib_info['name']] = {
+                    'items': processed_items,
+                    'counts': lib_info.get('counts')
+                }
         except Exception as e:
             if not first_error:
                 first_error = str(e)
+
+    # Apply date formatting if requested
+    date_format = _get_date_format_from_request()
+    if date_format:
+        from copy import deepcopy
+        data_by_library = deepcopy(data_by_library)
+        _format_dates_in_response(data_by_library, date_format, time.time())
 
     return jsonify({
         'data': data_by_library,
         'error': first_error
     })
+
+# --- Jellystat Endpoints ---
+@app.route('/api/jellystat/libraries', methods=['GET'])
+def get_jellystat_libraries():
+    """Fetches the list of Jellystat libraries."""
+    if not JELLYSTAT_URL or not JELLYSTAT_API_KEY:
+        return jsonify({"error": "Jellystat is not configured on the server."}), 500
+
+    # Add diagnostic logging to help debug authentication issues.
+    # This will show the first 8 characters of the key being used.
+    key_preview = JELLYSTAT_API_KEY[:8] if JELLYSTAT_API_KEY else "None"
+    log.info(f"Attempting to fetch Jellystat libraries using API key starting with: {key_preview}...")
+
+    try:
+        base_url = _get_jellystat_base_url()
+        
+        # 1. Fetch all libraries to get their IDs and names.
+        libs_response = requests.get(f"{base_url}/api/getLibraries", headers=_get_jellystat_headers())
+        libs_response.raise_for_status()
+        libraries = libs_response.json()
+
+        # 2. Fetch library stats to get the counts.
+        stats_response = requests.get(f"{base_url}/stats/getLibraryOverview", headers=_get_jellystat_headers())
+        stats_response.raise_for_status()
+        stats = stats_response.json()
+        
+        # 3. Create a map of library ID to its count.
+        count_map = {stat['Id']: stat.get('Library_Count') for stat in stats}
+
+        # 4. Combine the data into the format the frontend expects, including detailed counts.
+        formatted_libs = []
+        for lib in libraries:
+            counts = {}
+            stat_details = next((s for s in stats if s['Id'] == lib.get('Id')), None)
+            collection_type = stat_details.get('CollectionType') if stat_details else None
+
+            if collection_type == 'tvshows':
+                counts['Shows'] = stat_details.get('Library_Count')
+                counts['Seasons'] = stat_details.get('Season_Count')
+                counts['Episodes'] = stat_details.get('Episode_Count')
+            elif collection_type == 'movies':
+                counts['Movies'] = stat_details.get('Library_Count')
+            elif collection_type == 'music':
+                counts['Albums'] = stat_details.get('Library_Count') # Jellystat provides album count here
+
+            formatted_libs.append({
+                "section_id": lib.get("Id"),
+                "section_name": lib.get("Name"),
+                "counts": counts,
+            })
+        return jsonify(formatted_libs)
+    except Exception as e:
+        log.error(f"Failed to fetch Jellystat libraries: {e}")
+        return jsonify({"error": "Failed to communicate with Jellystat."}), 502
+
+@app.route('/api/jellystat/data', methods=['GET'])
+def get_jellystat_data():
+    """Fetches Jellystat recently added data for one or more library sections."""
+    section_ids_str = request.args.get('section_id')
+    if not JELLYSTAT_URL or not JELLYSTAT_API_KEY:
+        return jsonify({'data': None, 'error': 'Jellystat is not configured.'}), 500
+
+    # To get library names and counts, we need to fetch from two endpoints.
+    try:
+        base_url = _get_jellystat_base_url()
+        libs_response = requests.get(f"{base_url}/api/getLibraries", headers=_get_jellystat_headers())
+        libs_response.raise_for_status()
+        libraries = libs_response.json()
+
+        stats_response = requests.get(f"{base_url}/stats/getLibraryOverview", headers=_get_jellystat_headers())
+        stats_response.raise_for_status()
+        stats = stats_response.json()
+        
+        library_info = {
+            lib.get('Id'): {
+                'name': lib.get('Name'),
+                'counts': (
+                    lambda s: {
+                        'Shows': s.get('Library_Count'),
+                        'Seasons': s.get('Season_Count'),
+                        'Episodes': s.get('Episode_Count')
+                    } if s and s.get('CollectionType') == 'tvshows'
+                    else {'Movies': s.get('Library_Count')} if s and s.get('CollectionType') == 'movies'
+                    else {'Albums': s.get('Library_Count')} if s and s.get('CollectionType') == 'music'
+                    else {}
+                )(next((s for s in stats if s['Id'] == lib.get('Id')), None))
+            }
+            for lib in libraries
+        }
+    except Exception as e:
+        log.error(f"Failed to fetch Jellystat library list for /api/data: {e}")
+        return jsonify({"error": "Failed to fetch library list from Jellystat."}), 502
+
+    # If no section_id is provided, default to all libraries.
+    if not section_ids_str:
+        section_ids = list(library_info.keys())
+    else:
+        section_ids = section_ids_str.split(',')
+
+    data_by_library = {}
+    first_error = None
+
+    # Fetch 'recently added' for each library individually for better performance.
+    for section_id in section_ids:
+        try:
+            base_url = _get_jellystat_base_url()
+            # Use the 'libraryid' query parameter for targeted requests.
+            params = {'libraryid': section_id}
+            recent_response = requests.get(f"{base_url}/api/getRecentlyAdded", headers=_get_jellystat_headers(), params=params)
+            recent_response.raise_for_status()
+            raw_items = recent_response.json()
+            
+            processed_items = _process_jellystat_items(raw_items)
+            
+            lib_info = library_info.get(section_id)
+            if lib_info and lib_info.get('name'):
+                data_by_library[lib_info['name']] = {
+                    'items': processed_items,
+                    'counts': lib_info.get('counts')
+                }
+        except Exception as e:
+            if not first_error:
+                first_error = str(e)
+                log.error(f"Failed to fetch Jellystat recently added for library {section_id}: {e}")
+
+    # Apply date formatting if requested
+    date_format = _get_date_format_from_request()
+    if date_format:
+        from copy import deepcopy
+        data_by_library = deepcopy(data_by_library)
+        _format_dates_in_response(data_by_library, date_format, time.time())
+
+    return jsonify({'data': data_by_library, 'error': first_error})
 
 # --- Cache for instant API response ---
 _all_data_cache = {
@@ -251,31 +524,8 @@ def get_all_data():
 
     # If a date format is specified, work on a copy to avoid mutating the cache.
     if date_format:
-        data = deepcopy(data)
-
-    if date_format == 'short':
-        # Need to iterate through the new structure
-        for library_name, library_data in data.items():
-            for item in library_data.get('items', []):
-                if 'added_at' in item and isinstance(item['added_at'], int):
-                    item['added_at'] = datetime.fromtimestamp(item['added_at']).strftime('%b %d')
-
-    elif date_format == 'relative':
-        for library_name, library_data in data.items():
-            for item in library_data.get('items', []):
-                if 'added_at' in item and isinstance(item['added_at'], int):
-                    seconds = int(now - item['added_at'])
-                    if seconds < 60:
-                        item['added_at'] = f"{seconds} seconds ago"
-                    elif seconds < 3600:
-                        item['added_at'] = f"{seconds // 60} minutes ago"
-                    elif seconds < 86400:
-                        item['added_at'] = f"{seconds // 3600} hours ago"
-                    elif seconds < 2592000: # 30 days
-                        item['added_at'] = f"{seconds // 86400} days ago"
-                    elif seconds < 31536000: # 365 days
-                        item['added_at'] = f"{seconds // 2592000} months ago"
-                    else:
-                        item['added_at'] = f"{seconds // 31536000} years ago"
+        data_copy = deepcopy(data)
+        _format_dates_in_response(data_copy, date_format, now)
+        return jsonify(data_copy)
 
     return jsonify(data)

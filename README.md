@@ -1,19 +1,20 @@
-# Tautulli - Recently Added Viewer
+# Media Manager - Recently Added Viewer
 
-A simple, fast, and efficient web-based tool to view the "Recently Added" media from your Plex server via the Tautulli API.
+A simple, fast, and efficient web-based tool to view the "Recently Added" media from your media servers via the Tautulli and Jellystat APIs.
 
  <!-- It's recommended to replace this with an actual screenshot -->
 
 ## Features
 
-- **Smart Library Selection**: Dynamically fetches and lists your Plex libraries, with all libraries selected by default for immediate viewing.
+- **Multi-Source Support**: Connects to both Tautulli (for Plex) and Jellystat (for Jellyfin/Emby) and allows you to switch between them seamlessly.
+- **Smart Library Selection**: Dynamically fetches and lists your libraries from the selected source, with all libraries selected by default for immediate viewing.
 - **Grouped Display**: Displays recently added items grouped by library for clarity.
 - **Detailed Information**: Shows the item's title (formatted for movies, TV shows, and music), year, and when it was added.
 - **Flexible Date Formatting**: Choose how to display the "added at" timestamp:
     - **Date & Time**: Full timestamp (e.g., `10/1/2023, 5:00:00 PM`)
     - **Relative**: Human-readable time ago (e.g., `2 days ago`)
     - **Short**: Abbreviated date (e.g., `Oct 01`)
-- **High Performance**: Utilizes a background caching mechanism. The application pre-loads all data on startup and then intelligently polls Tautulli for changes, ensuring the UI loads instantly without making the user wait for API calls.
+- **High Performance (Tautulli)**: Utilizes a background caching mechanism for Tautulli. The application pre-loads all data on startup and then intelligently polls Tautulli for changes, ensuring the UI loads instantly without making the user wait for API calls.
 
 ## How It Works
 
@@ -21,10 +22,10 @@ The tool is composed of a Python Flask backend and a vanilla JavaScript frontend
 
 - The **backend** communicates with the Tautulli API to:
     1.  **Prime a cache on startup** by fetching all "recently added" data from Tautulli.
-    2.  Run a **background thread** that polls Tautulli every 15 seconds to check for library changes (e.g., new media added).
+    2.  Run a **background thread** that polls Tautulli periodically to check for library changes (e.g., new media added).
     3.  If a change is detected, it **automatically refreshes the cache** with the latest data.
-    4.  Provide API endpoints that allow the frontend to request data for specific libraries on-demand.
-- The **frontend** provides the user interface to make selections and displays the data fetched by the backend. It updates dynamically as you select different libraries or date formats.
+    4.  Provide on-demand API endpoints for both Tautulli and Jellystat.
+- The **frontend** provides the user interface to select a data source, choose libraries, and displays the data fetched from the backend. It updates dynamically as you make selections.
 
 ## Setup and Installation
 This application is designed to be run as a Docker container.
@@ -33,8 +34,9 @@ This application is designed to be run as a Docker container.
 
 - Docker and Docker Compose.
 - A running instance of Tautulli connected to your Plex Media Server.
-- Your Tautulli URL and API Key. You can find the API key in Tautulli under `Settings` > `Web Interface` > `API`.
-
+- A running instance of Jellystat connected to your Jellyfin/Emby server.
+- Your Tautulli URL and API Key (found in Tautulli under `Settings` > `Web Interface` > `API`).
+- Your Jellystat URL and API Key (found in Jellystat under `Settings` > `General` > `API Keys`).
 ### 1. Create `requirements.txt`
 
 Your project should contain a `requirements.txt` file with the following content to specify the Python dependencies:
@@ -49,16 +51,22 @@ gunicorn==22.0.0
 
 Create a file named `docker-compose.yml` in the same directory. This file will define the service and its configuration.
 
-```yaml
+```dockercompose
 services:
   media-manager:
-    build: .
+    build:
+      context: .
+      args:
+        - VERSION=${VERSION:-dev}
     container_name: media-manager
     ports:
-      - "5054:5000" # Map host port 5054 to container port 5000
+      - "5053:5000" # Map host port 5053 to container port 5000
     environment:
       - TAUTULLI_URL=http://192.168.0.10:8181
-      - TAUTULLI_API_KEY=YOUR_TAUTULLI_API_KEY
+      - TAUTULLI_API_KEY=54bcef21d7084082b189a11ca7f6bf6a
+      # --- Optional: Add your Jellystat details here ---
+      - JELLYSTAT_URL=http://192.168.0.10:3033
+      - JELLYSTAT_API_KEY=b8026968-cce4-40a2-8fba-73c4939a5183
     restart: unless-stopped
     volumes:
       - .:/usr/src/app
@@ -66,7 +74,7 @@ services:
 
 **Important:** Replace the `TAUTULLI_URL` and `TAUTULLI_API_KEY` with your actual Tautulli URL and API key if they differ from the example.
 
-### 3. Create `Dockerfile`
+### 3. Create a `Dockerfile`
 
 Create a file named `Dockerfile` in the same directory. This tells Docker how to build the application image.
 
@@ -80,7 +88,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
 ```
 
 ### 4. Run the Application

@@ -27,8 +27,12 @@
         <!-- Configuration -->
         <div id="config-card" class="card p-6 rounded-lg shadow-lg mb-8">
             <div class="flex justify-between items-start">
-                <h2 class="text-2xl font-semibold">Tautulli - Recently Added</h2>
+                <h2 id="main-title" class="text-2xl font-semibold">Recently Added</h2>
                 <div class="flex items-center space-x-4">
+                    <div id="source-selector-container" class="hidden items-center space-x-2">
+                        <label for="source-selector" class="font-semibold">Source:</label>
+                        <select id="source-selector" class="p-2 rounded" style="background-color: #4a5568;"></select>
+                    </div>
                     <label for="library-selector" class="font-semibold">Select Library:</label>
                     <div id="library-selector" class="flex flex-wrap gap-x-4 gap-y-2 p-2 rounded" style="background-color: #4a5568;"><p>-- Loading Libraries --</p></div>
                 </div>
@@ -65,6 +69,10 @@
             const loadingDiv = document.getElementById('loading');
             const resultsDiv = document.getElementById('results');
             const versionDiv = document.getElementById('app-version');
+            const sourceSelector = document.getElementById('source-selector');
+            const sourceSelectorContainer = document.getElementById('source-selector-container');
+            const mainTitle = document.getElementById('main-title');
+            let currentSource = '';
 
             const fetchVersion = async () => {
                 try {
@@ -76,24 +84,59 @@
                 }
             };
 
+            const initializeSources = async () => {
+                try {
+                    const response = await fetch('/api/sources');
+                    const sources = await response.json();
+                    if (sources.length === 0) {
+                        librarySelector.innerHTML = '<p class="text-red-400">-- No data source (Tautulli/Jellystat) is configured. --</p>';
+                        return;
+                    }
+                    if (sources.length > 1) {
+                        sources.forEach(source => {
+                            const option = new Option(source.name, source.id);
+                            sourceSelector.add(option);
+                        });
+                        sourceSelectorContainer.classList.remove('hidden');
+                    }
+                    currentSource = sources[0].id;
+                    mainTitle.textContent = `${sources[0].name} - Recently Added`;
+                    populateLibraries();
+                } catch (e) {
+                    console.error("Failed to fetch sources", e);
+                }
+            };
+
             const populateLibraries = async () => {
                 try {
-                    const response = await fetch('/api/libraries');
+                    const response = await fetch(`/api/${currentSource}/libraries`);
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        // Use the specific error from the backend, or a generic one
+                        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+                    }
                     const libraries = await response.json();
                     librarySelector.innerHTML = ''; // Clear loading message
                     libraries.forEach(lib => {
                         const wrapper = document.createElement('div');
                         wrapper.className = 'flex items-center';
+                        
+                        let countsHtml = '';
+                        if (lib.counts && Object.keys(lib.counts).length > 0) {
+                            const countEntries = Object.entries(lib.counts).map(([key, value]) => `${key}: ${value}`).join(' &middot; ');
+                            countsHtml = `<span class="text-gray-400 text-sm ml-2">(${countEntries})</span>`;
+                        }
+
                         wrapper.innerHTML = `
                             <input type="checkbox" id="lib-${lib.section_id}" name="library-selection" value="${lib.section_id}" class="mr-2" checked>
-                            <label for="lib-${lib.section_id}">${lib.section_name}</label>
+                            <label for="lib-${lib.section_id}">${lib.section_name}</label>${countsHtml}
                         `;
                         librarySelector.appendChild(wrapper);
                     });
                     // After populating and checking all libraries, trigger the initial data load.
                     fetchData();
                 } catch (error) {
-                    librarySelector.innerHTML = '<p class="text-red-400">-- Error Loading Libraries --</p>';
+                    librarySelector.innerHTML = `<p class="text-red-400">-- Error: ${error.message} --</p>`;
                     console.error("Failed to load libraries", error);
                 }
             };
@@ -111,7 +154,7 @@
                 resultsDiv.innerHTML = '';
 
                 try {
-                    const response = await fetch(`/api/data?section_id=${sectionIds.join(',')}`);
+                    const response = await fetch(`/api/${currentSource}/data?section_id=${sectionIds.join(',')}`);
                     const data = await response.json();
                     renderItems(data);
 
@@ -166,12 +209,14 @@
                 const sortedLibraryNames = Object.keys(items.data).sort();
 
                 for (const libraryName of sortedLibraryNames) {
-                    const libraryItems = items.data[libraryName];
+                    const libraryData = items.data[libraryName];
+                    const libraryItems = libraryData.items;
                     allLibrariesHtml += `<div class="mb-8">`;
                     allLibrariesHtml += `<h2 class="text-2xl font-semibold mb-4">${libraryName}</h2>`;
                     allLibrariesHtml += `<div class="space-y-3">`;
                     if (libraryItems && libraryItems.length > 0) {
-                        libraryItems.forEach(item => {
+                        // Sort items by added_at descending (newest first)
+                        libraryItems.sort((a, b) => b.added_at - a.added_at).forEach(item => {
                             // The 'Remove' button and its logic have been removed.
                             allLibrariesHtml += `<div class="card p-3 rounded-lg" id="tautulli-item-${item.id || Math.random()}">
                                 <div><p class="font-bold">${item.title} (${item.year})</p><p class="text-sm text-gray-400">Added: ${formatTimestamp(item.added_at)}</p></div>
@@ -186,13 +231,22 @@
             };
 
             const handleSelectionChange = (event) => {
-                if (event.target.name === 'library-selection' || event.target.name === 'date-format') fetchData();
+                if (event.target.id === 'source-selector') {
+                    currentSource = event.target.value;
+                    const selectedOption = event.target.options[event.target.selectedIndex];
+                    mainTitle.textContent = `${selectedOption.text} - Recently Added`;
+                    resultsDiv.innerHTML = '';
+                    librarySelector.innerHTML = '<p>-- Loading Libraries --</p>';
+                    populateLibraries();
+                } else if (event.target.name === 'library-selection' || event.target.name === 'date-format') {
+                    fetchData();
+                }
             };
 
             document.getElementById('config-card').addEventListener('change', handleSelectionChange);
 
-            // Populate the library dropdown when the page loads
-            populateLibraries();
+            // Initialize sources, which will then trigger library population
+            initializeSources();
             fetchVersion();
         });
     </script>
