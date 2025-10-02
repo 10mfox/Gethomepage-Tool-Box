@@ -1,5 +1,7 @@
 # Media Manager - Recently Added Viewer
 
+A simple, fast, and efficient web-based tool to view the "Recently Added" media from your media servers via the Tautulli and Jellystat APIs.
+
 # Roadmap
 
 ## Completed
@@ -17,9 +19,6 @@
 - [ ] Documentation
 - [ ] Final Deployment
 - [ ] Final Performance Optimization
-
-
-A simple, fast, and efficient web-based tool to view the "Recently Added" media from your media servers via the Tautulli and Jellystat APIs.
 
  <!-- It's recommended to replace this with an actual screenshot -->
 
