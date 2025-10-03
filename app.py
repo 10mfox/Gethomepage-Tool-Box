@@ -1,6 +1,7 @@
 import os
 import requests
 from flask import Flask, render_template, request, jsonify
+from flasgger import Swagger, swag_from
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 import threading
@@ -8,6 +9,7 @@ import logging
 import time
 
 app = Flask(__name__, template_folder='.')
+swagger = Swagger(app)
 
 # Read configuration from environment variables
 TAUTULLI_URL = os.environ.get('TAUTULLI_URL')
@@ -136,12 +138,43 @@ def index():
 
 @app.route('/api/version')
 def get_version():
-    """Returns the application version."""
+    """
+    Get Application Version
+    ---
+    description: Returns the application version.
+    responses:
+      200:
+        description: The current version of the application.
+        schema:
+          type: object
+          properties:
+            version:
+              type: string
+              example: 'dev'
+    """
     return jsonify({"version": VERSION})
 
 @app.route('/api/sources', methods=['GET'])
 def get_sources():
-    """Returns a list of configured data sources (Tautulli, Jellystat, etc.)."""
+    """
+    Get Configured Data Sources
+    ---
+    description: Returns a list of configured data sources (Tautulli, Jellystat, etc.).
+    responses:
+      200:
+        description: A list of configured data sources.
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                example: 'tautulli'
+              name:
+                type: string
+                example: 'Tautulli'
+    """
     sources = []
     if TAUTULLI_URL and TAUTULLI_API_KEY:
         sources.append({"id": "tautulli", "name": "Tautulli"})
@@ -149,10 +182,32 @@ def get_sources():
         sources.append({"id": "jellystat", "name": "Jellystat"})
     return jsonify(sources)
 
-# --- Tautulli Endpoints ---
+# --- Library Endpoints ---
 @app.route('/api/tautulli/libraries', methods=['GET'])
 def get_tautulli_libraries():
-    """Fetches the list of Tautulli libraries."""
+    """
+    Get Tautulli Libraries
+    ---
+    description: Fetches the list of Tautulli libraries.
+    responses:
+      200:
+        description: A list of Tautulli libraries with their details and counts.
+        schema:
+          type: array
+          items:
+            $ref: '#/definitions/Library'
+      500:
+        description: Tautulli is not configured on the server.
+      502:
+        description: Failed to communicate with Tautulli.
+    definitions:
+      Library:
+        type: object
+        properties:
+          section_id: {type: string, example: '1'}
+          section_name: {type: string, example: 'Movies'}
+          counts: {type: object, example: {Movies: 1234}}
+    """
     if not TAUTULLI_URL or not TAUTULLI_API_KEY:
         return jsonify({"error": "Tautulli is not configured on the server."}), 500
 
@@ -187,98 +242,25 @@ def get_tautulli_libraries():
         log.error(f"Failed to fetch Tautulli libraries: {e}")
         return jsonify({"error": "Failed to communicate with Tautulli."}), 502
 
-@app.route('/api/tautulli/data', methods=['GET'])
-def get_tautulli_data():
-    """Fetches Tautulli recently added data for one or more library sections."""
-    section_ids_str = request.args.get('section_id')
-    if not TAUTULLI_URL or not TAUTULLI_API_KEY:
-        return jsonify({
-            'data': None, 'error': 'Tautulli URL or API Key is not configured on the server.'
-        }), 500
-    
-    try:
-        # Fetch all libraries to map section_id to section_name
-        libs_params = {"apikey": TAUTULLI_API_KEY, "cmd": "get_libraries"}
-        libs_response = requests.get(f"{TAUTULLI_URL}/api/v2", params=libs_params)
-        libs_response.raise_for_status()
-        libraries = libs_response.json().get('response', {}).get('data', [])
-        
-        library_info = {
-            str(lib['section_id']): {
-                'name': lib['section_name'],
-                'counts': (
-                    {'Shows': lib.get('count'), 'Seasons': lib.get('parent_count'), 'Episodes': lib.get('child_count')}
-                    if lib.get('section_type') == 'show'
-                    else {'Movies': lib.get('count')}
-                    if lib.get('section_type') == 'movie'
-                    else {'Artists': lib.get('count'), 'Albums': lib.get('parent_count')}
-                    if lib.get('section_type') == 'artist'
-                    else {}
-                )
-            }
-            for lib in libraries
-        }
-    except Exception as e:
-        log.error(f"Failed to fetch library list for /api/data: {e}")
-        return jsonify({"error": "Failed to fetch library list from Tautulli."}), 502
-
-    # If no section_id is provided, default to all libraries.
-    if not section_ids_str:
-        section_ids = list(library_info.keys())
-    else:
-        section_ids = section_ids_str.split(',')
-
-    # --- Efficient Data Fetching ---
-    # 1. Fetch history ONCE for all selected libraries.
-    try:
-        history_params = {"apikey": TAUTULLI_API_KEY, "cmd": "get_history", "length": 250}
-        history_response = requests.get(f"{TAUTULLI_URL}/api/v2", params=history_params)
-        history_response.raise_for_status()
-        history_data = history_response.json().get('response', {}).get('data', {}).get('data', [])
-        history_map = {str(item.get('rating_key')): item.get('history_id') for item in history_data if item.get('rating_key') and item.get('history_id')}
-    except Exception as e:
-        log.error(f"Failed to fetch Tautulli history: {e}")
-        return jsonify({"error": "Failed to fetch history from Tautulli."}), 502
-
-    data_by_library = {}
-    first_error = None
-
-    # 2. Fetch recently added for each library and process using the single history map.
-    for section_id in section_ids:
-        try:
-            recent_params = {"apikey": TAUTULLI_API_KEY, "cmd": "get_recently_added", "section_id": section_id, "count": 25}
-            recent_response = requests.get(f"{TAUTULLI_URL}/api/v2", params=recent_params)
-            recent_response.raise_for_status()
-            raw_items = recent_response.json().get('response', {}).get('data', {}).get('recently_added', [])
-            
-            processed_items = _process_tautulli_items(raw_items, history_map)
-            
-            lib_info = library_info.get(section_id)
-            if lib_info and lib_info.get('name'):
-                data_by_library[lib_info['name']] = {
-                    'items': processed_items,
-                    'counts': lib_info.get('counts')
-                }
-        except Exception as e:
-            if not first_error:
-                first_error = str(e)
-
-    # Apply date formatting if requested
-    date_format = _get_date_format_from_request()
-    if date_format:
-        from copy import deepcopy
-        data_by_library = deepcopy(data_by_library)
-        _format_dates_in_response(data_by_library, date_format, time.time())
-
-    return jsonify({
-        'data': data_by_library,
-        'error': first_error
-    })
-
 # --- Jellystat Endpoints ---
 @app.route('/api/jellystat/libraries', methods=['GET'])
 def get_jellystat_libraries():
-    """Fetches the list of Jellystat libraries."""
+    """
+    Get Jellystat Libraries
+    ---
+    description: Fetches the list of Jellystat libraries.
+    responses:
+      200:
+        description: A list of Jellystat libraries with their details and counts.
+        schema:
+          type: array
+          items:
+            $ref: '#/definitions/Library'
+      500:
+        description: Jellystat is not configured on the server.
+      502:
+        description: Failed to communicate with Jellystat.
+    """
     if not JELLYSTAT_URL or not JELLYSTAT_API_KEY:
         return jsonify({"error": "Jellystat is not configured on the server."}), 500
 
@@ -329,85 +311,6 @@ def get_jellystat_libraries():
         log.error(f"Failed to fetch Jellystat libraries: {e}")
         return jsonify({"error": "Failed to communicate with Jellystat."}), 502
 
-@app.route('/api/jellystat/data', methods=['GET'])
-def get_jellystat_data():
-    """Fetches Jellystat recently added data for one or more library sections."""
-    section_ids_str = request.args.get('section_id')
-    if not JELLYSTAT_URL or not JELLYSTAT_API_KEY:
-        return jsonify({'data': None, 'error': 'Jellystat is not configured.'}), 500
-
-    # To get library names and counts, we need to fetch from two endpoints.
-    try:
-        base_url = _get_jellystat_base_url()
-        libs_response = requests.get(f"{base_url}/api/getLibraries", headers=_get_jellystat_headers())
-        libs_response.raise_for_status()
-        libraries = libs_response.json()
-
-        stats_response = requests.get(f"{base_url}/stats/getLibraryOverview", headers=_get_jellystat_headers())
-        stats_response.raise_for_status()
-        stats = stats_response.json()
-        
-        library_info = {
-            lib.get('Id'): {
-                'name': lib.get('Name'),
-                'counts': (
-                    lambda s: {
-                        'Shows': s.get('Library_Count'),
-                        'Seasons': s.get('Season_Count'),
-                        'Episodes': s.get('Episode_Count')
-                    } if s and s.get('CollectionType') == 'tvshows'
-                    else {'Movies': s.get('Library_Count')} if s and s.get('CollectionType') == 'movies'
-                    else {'Albums': s.get('Library_Count')} if s and s.get('CollectionType') == 'music'
-                    else {}
-                )(next((s for s in stats if s['Id'] == lib.get('Id')), None))
-            }
-            for lib in libraries
-        }
-    except Exception as e:
-        log.error(f"Failed to fetch Jellystat library list for /api/data: {e}")
-        return jsonify({"error": "Failed to fetch library list from Jellystat."}), 502
-
-    # If no section_id is provided, default to all libraries.
-    if not section_ids_str:
-        section_ids = list(library_info.keys())
-    else:
-        section_ids = section_ids_str.split(',')
-
-    data_by_library = {}
-    first_error = None
-
-    # Fetch 'recently added' for each library individually for better performance.
-    for section_id in section_ids:
-        try:
-            base_url = _get_jellystat_base_url()
-            # Use the 'libraryid' query parameter for targeted requests.
-            params = {'libraryid': section_id}
-            recent_response = requests.get(f"{base_url}/api/getRecentlyAdded", headers=_get_jellystat_headers(), params=params)
-            recent_response.raise_for_status()
-            raw_items = recent_response.json()
-            
-            processed_items = _process_jellystat_items(raw_items)
-            
-            lib_info = library_info.get(section_id)
-            if lib_info and lib_info.get('name'):
-                data_by_library[lib_info['name']] = {
-                    'items': processed_items,
-                    'counts': lib_info.get('counts')
-                }
-        except Exception as e:
-            if not first_error:
-                first_error = str(e)
-                log.error(f"Failed to fetch Jellystat recently added for library {section_id}: {e}")
-
-    # Apply date formatting if requested
-    date_format = _get_date_format_from_request()
-    if date_format:
-        from copy import deepcopy
-        data_by_library = deepcopy(data_by_library)
-        _format_dates_in_response(data_by_library, date_format, time.time())
-
-    return jsonify({'data': data_by_library, 'error': first_error})
-
 # --- Cache for instant API response ---
 _all_data_cache = {
     "data": None,
@@ -416,8 +319,8 @@ _all_data_cache = {
 _cache_lock = threading.Lock()
 POLL_INTERVAL_SECONDS = 15  # Check for changes every 15 seconds
 
-def _fetch_all_data_concurrently():
-    """Internal function to fetch all data concurrently."""
+def _fetch_all_tautulli_data_concurrently():
+    """Internal function to fetch all Tautulli data concurrently."""
     # 1. Fetch libraries and history concurrently
     with ThreadPoolExecutor(max_workers=2) as executor:
         libs_future = executor.submit(requests.get, f"{TAUTULLI_URL}/api/v2", params={"apikey": TAUTULLI_API_KEY, "cmd": "get_libraries"})
@@ -434,14 +337,14 @@ def _fetch_all_data_concurrently():
             counts = {}
             section_type = lib.get('section_type')
             if section_type == 'show':
-                counts['show'] = int(lib.get('count', 0))
-                counts['season'] = int(lib.get('parent_count', 0))
-                counts['episode'] = int(lib.get('child_count', 0))
+                counts['Shows'] = lib.get('count')
+                counts['Seasons'] = lib.get('parent_count')
+                counts['Episodes'] = lib.get('child_count')
             elif section_type == 'movie':
-                counts['movie'] = int(lib.get('count', 0))
+                counts['Movies'] = lib.get('count')
             elif section_type == 'artist':
-                counts['artist'] = int(lib.get('count', 0))
-                counts['album'] = int(lib.get('parent_count', 0))
+                counts['Artists'] = lib.get('count')
+                counts['Albums'] = lib.get('parent_count')
             data_by_library[section_name] = {'items': [], 'counts': counts}
 
     def fetch_for_library(library):
@@ -467,7 +370,7 @@ def _fetch_all_data_concurrently():
 
     return data_by_library
 
-def _get_library_state():
+def _get_tautulli_library_state():
     """
     Fetches a lightweight snapshot of library counts to detect changes.
     Returns a dictionary of {section_id: count} or None on error.
@@ -483,40 +386,152 @@ def _get_library_state():
         log.warning(f"State check: Could not fetch library state: {e}")
         return None
 
-def update_cache_in_background(initial_state):
+def _fetch_all_jellystat_data_concurrently():
+    """Internal function to fetch all Jellystat data concurrently."""
+    base_url = _get_jellystat_base_url()
+    headers = _get_jellystat_headers()
+
+    # 1. Fetch libraries and stats concurrently
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        libs_future = executor.submit(requests.get, f"{base_url}/api/getLibraries", headers=headers)
+        stats_future = executor.submit(requests.get, f"{base_url}/stats/getLibraryOverview", headers=headers)
+        all_libraries = libs_future.result().json()
+        stats = stats_future.result().json()
+
+    data_by_library = {}
+    for lib in all_libraries:
+        section_name = lib.get('Name')
+        if section_name:
+            stat_details = next((s for s in stats if s['Id'] == lib.get('Id')), None)
+            counts = {}
+            if stat_details:
+                collection_type = stat_details.get('CollectionType')
+                if collection_type == 'tvshows':
+                    counts['Shows'] = stat_details.get('Library_Count')
+                    counts['Seasons'] = stat_details.get('Season_Count')
+                    counts['Episodes'] = stat_details.get('Episode_Count')
+                elif collection_type == 'movies':
+                    counts['Movies'] = stat_details.get('Library_Count')
+                elif collection_type == 'music':
+                    counts['Albums'] = stat_details.get('Library_Count')
+            data_by_library[section_name] = {'items': [], 'counts': counts}
+
+    def fetch_for_library(library):
+        """Fetch raw recently added items for a single library."""
+        try:
+            params = {'libraryid': library['Id']}
+            response = requests.get(f"{base_url}/api/getRecentlyAdded", headers=headers, params=params)
+            response.raise_for_status()
+            return library.get('Name'), response.json()
+        except Exception as e:
+            log.warning(f"Error fetching Jellystat recently added for library {library.get('Name')}: {e}")
+            return library.get('Name'), []
+
+    # 2. Fetch all 'recently_added' data concurrently
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = executor.map(fetch_for_library, all_libraries)
+
+    # 3. Process all results
+    for library_name, raw_items in results:
+        if library_name in data_by_library and raw_items:
+            data_by_library[library_name]['items'] = _process_jellystat_items(raw_items)
+
+    return data_by_library
+
+def _get_jellystat_library_state():
+    """Fetches a lightweight snapshot of Jellystat library counts to detect changes."""
+    try:
+        base_url = _get_jellystat_base_url()
+        response = requests.get(f"{base_url}/stats/getLibraryOverview", headers=_get_jellystat_headers(), timeout=10)
+        response.raise_for_status()
+        stats = response.json()
+        # Create a state signature from library counts
+        return {stat['Id']: stat.get('Library_Count', 0) for stat in stats}
+    except Exception as e:
+        log.warning(f"Jellystat state check: Could not fetch library state: {e}")
+        return None
+
+def update_cache_in_background(source_id, initial_state):
     """
-    Periodically checks for changes in Tautulli and updates the cache only when
-    a change is detected. This runs in a background thread.
+    Periodically checks for changes in a data source and updates the cache
+    only when a change is detected. This runs in a background thread.
     """
     last_state = initial_state
+    
+    # Map source_id to its corresponding functions
+    source_map = {
+        "tautulli": {
+            "state_fetcher": _get_tautulli_library_state,
+            "data_fetcher": _fetch_all_tautulli_data_concurrently,
+        },
+        "jellystat": {
+            "state_fetcher": _get_jellystat_library_state,
+            "data_fetcher": _fetch_all_jellystat_data_concurrently,
+        }
+    }
+    
+    if source_id not in source_map:
+        log.error(f"Unknown source '{source_id}' for background cache update.")
+        return
+
+    state_fetcher = source_map[source_id]["state_fetcher"]
+    data_fetcher = source_map[source_id]["data_fetcher"]
+
     while True:
-        current_state = _get_library_state()
+        current_state = state_fetcher()
         if current_state and current_state != last_state:
-            log.info("Change detected. Refreshing Tautulli data cache...")
+            log.info(f"Change detected for {source_id}. Refreshing data cache...")
             try:
-                data = _fetch_all_data_concurrently()
+                data = data_fetcher()
                 with _cache_lock:
-                    _all_data_cache["data"] = data
-                    _all_data_cache["timestamp"] = time.time()
+                    _all_data_cache["data"][source_id] = data
+                    _all_data_cache["timestamp"][source_id] = time.time()
                 last_state = current_state
-                log.info("Cache refresh successful.")
+                log.info(f"Cache refresh for {source_id} successful.")
             except Exception as e:
-                log.error(f"Error refreshing cache: {e}")
+                log.error(f"Error refreshing {source_id} cache: {e}")
         time.sleep(POLL_INTERVAL_SECONDS)
 
-@app.route('/api/all_data', methods=['GET'])
-def get_all_data():
+@app.route('/api/data', methods=['GET'])
+def get_data():
     """
-    Serves recently added data for ALL libraries from the in-memory cache.
-    Accepts an optional 'dateFormat' query parameter (e.g., ?dateFormat=short).
+    Get All Recently Added Data for a Source (from Cache)
+    ---
+    parameters:
+      - name: source
+        in: query
+        type: string
+        required: true
+        description: The data source to query (e.g., 'tautulli' or 'jellystat').
+      - name: source
+        in: query
+        type: string
+        required: true
+        description: The data source to query (e.g., 'tautulli' or 'jellystat').
+      - name: dateFormat
+        in: query
+        type: string
+        required: false
+        description: "The desired date format. Options: 'short', 'relative'."
+    responses:
+      200:
+        description: A dictionary of recently added items, grouped by library name.
+      400:
+        description: The 'source' query parameter is missing.
+      503:
+        description: The service is starting and the cache is not yet populated.
     """
     now = time.time()
     from copy import deepcopy
     date_format = request.args.get('dateFormat')
+    source = request.args.get('source')
+
+    if not source:
+        return jsonify({"error": "A 'source' query parameter is required."}), 400
     
     with _cache_lock:
         # The background thread keeps this data fresh. We just serve it.
-        data = _all_data_cache.get("data")
+        data = _all_data_cache.get("data", {}).get(source)
 
     # Handle case where cache is not yet populated on startup
     if data is None:
