@@ -74,7 +74,7 @@ Create a file named `docker-compose.yml` in the same directory. This file will d
 services:
   gethomepage-tool-box:
     container_name: Gethomepage-Tool-Box
-    image: ghcr.io/10mfox/gethomepage-tool-box:0.0.6
+    image: ghcr.io/10mfox/gethomepage-tool-box:latest
     ports:
       - "5054:5000" # Map host port 5055 to container port 5000
     environment:
