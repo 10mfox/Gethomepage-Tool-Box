@@ -11,6 +11,9 @@ A simple, fast, and efficient web-based tool to view the "Recently Added" media 
 - [x] High-Performance Caching for API to reduce CPU usage and increase speed.
 - [x] Added Swagger UI for API Documentation.
 
+## In Progress
+- [ ] Fix Cache Not Updating When Something Has Changed
+
 ## Planned
 - [ ] Add Audiobookshelf Support
 - [ ] Add A Way To Modify The Custom Api To Your Liking
