@@ -77,7 +77,7 @@ services:
     depends_on:
       - redis
     ports:
-      - "5053:5000"
+      - "5054:5000"
     environment:
       # --- Tautulli / Jellystat Configuration ---
       - TAUTULLI_URL=http://0.0.0.0:1234
