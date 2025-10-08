@@ -15,11 +15,11 @@ A powerful, fast, and efficient web-based tool to manage your self-hosted servic
 - [x] Visual CSS GUI editor for live theme customization (`/editor/css-gui`).
 
 ## In Progress
-- [ ] Add Audiobookshelf Support for "Recently Added".
 - [ ] Working on Jellystat currently broken.
 - [ ] Currently working on Tautulli not keeping api up to date  
 
 ## Planned
+- [ ] Add Audiobookshelf Support for "Recently Added".
 - [ ] Testing
 - [ ] Documentation
 - [ ] Final Deployment
