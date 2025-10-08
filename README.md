@@ -27,6 +27,8 @@ A powerful, fast, and efficient web-based tool to manage your self-hosted servic
 
  <!-- It's recommended to replace this with an actual screenshot -->
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/S6S6S178E)
+
 ## Features
 
 - **Multi-Source Support**: Connects to both Tautulli (for Plex) and Jellystat (for Jellyfin/Emby) and allows you to switch between them seamlessly.
