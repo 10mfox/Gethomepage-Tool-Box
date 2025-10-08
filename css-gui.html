@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get-Homepage CSS GUI Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #1a202c; color: #e2e8f0; }
+        .control-panel, .input-group { background-color: #2d3748; }
+        .btn { transition: background-color 0.2s; }
+        .btn-primary { background-color: #4299e1; }
+        .btn-primary:hover { background-color: #3182ce; }
+        .btn-secondary { background-color: #667eea; }
+        .btn-secondary:hover { background-color: #5a67d8; }
+        input[type="text"], input[type="number"], input[type="range"], select { background-color: #4a5568; }
+        input[type="color"] { min-height: 2.5rem; }
+        .accordion-header { background-color: #4a5568; cursor: pointer; }
+        .accordion-header:hover { background-color: #718096; }
+        .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+        .notification {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            padding: 1rem 2rem; border-radius: 0.5rem; color: white; z-index: 50;
+            opacity: 0; transition: opacity 0.5s ease-in-out;
+        }
+        .notification.show { opacity: 1; }
+        .notification.success { background-color: #38a169; }
+        .notification.error { background-color: #c53030; }
+        .view-toggle { background-color: #4a5568; }
+        .view-toggle:hover { background-color: #718096; }
+        .view-toggle.active { background-color: #4299e1; color: white; }
+        .resize-handle { cursor: col-resize; width: 10px; }
+        @media (max-width: 768px) { .resize-handle { display: none; } }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col">
+    <header class="p-4 border-b border-gray-700">
+        <div class="max-w-full mx-auto flex justify-between items-center">
+            <h1 class="text-2xl md:text-4xl font-bold">CSS GUI Editor</h1>
+            <div class="flex items-center space-x-4">
+                <a href="/editor" class="text-blue-400 hover:text-blue-300">&larr; Config Editor</a>
+                <a href="/" class="text-blue-400 hover:text-blue-300">&larr; Back to Media Manager</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow flex flex-col md:flex-row overflow-hidden">
+        <!-- Control Panel -->
+        <div class="w-full md:w-1/3 p-4 overflow-y-auto">
+            <div class="control-panel p-4 rounded-lg shadow-lg">
+                <div class="flex justify-between mb-4">
+                    <button id="reset-button" class="btn btn-secondary font-bold py-2 px-4 rounded">Reset to Defaults</button>
+                    <button id="save-css-button" class="btn btn-primary font-bold py-2 px-4 rounded">Save to custom.css</button>
+                </div>
+                <div id="settings-accordion">
+                    <!-- Accordion sections will be injected here by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Resize Handle -->
+        <div class="resize-handle bg-gray-700 hover:bg-blue-500 transition-colors hidden md:block"></div>
+
+        <!-- Preview Pane -->
+        <div class="w-full md:w-2/3 p-4 flex flex-col">
+            <div class="input-group p-4 rounded-lg shadow-lg mb-4 flex flex-col space-y-4">
+                <div>
+                    <label for="homepage-url" class="block font-semibold mb-2">Homepage URL for Preview:</label>
+                    <input type="text" id="homepage-url" class="w-full p-2 rounded" placeholder="Set HOMEPAGE_PREVIEW_URL in docker-compose.yml" value="{{ homepage_preview_url }}" {% if homepage_preview_url %}readonly{% endif %}>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-2">Preview Mode:</label>
+                    <div id="view-toggle-group" class="flex space-x-2">
+                        <button data-view="desktop" class="view-toggle btn font-bold py-2 px-4 rounded active">Desktop</button>
+                        <button data-view="mobile-portrait" class="view-toggle btn font-bold py-2 px-4 rounded">Portrait</button>
+                        <button data-view="mobile-landscape" class="view-toggle btn font-bold py-2 px-4 rounded">Landscape</button>
+                    </div>
+                </div>
+            </div>
+            <div id="preview-viewport" class="flex-grow bg-gray-800 rounded-lg overflow-hidden relative">
+                <div id="scaled-wrapper" style="width: 1920px; height: 1080px; transform-origin: 0 0;">
+                     <iframe id="preview-frame" style="width: 1920px; height: 1080px;" class="border-0"></iframe>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const accordionContainer = document.getElementById('settings-accordion');
+            const homepageUrlInput = document.getElementById('homepage-url');
+            const previewFrame = document.getElementById('preview-frame');
+            const saveButton = document.getElementById('save-css-button');
+            const resetButton = document.getElementById('reset-button');
+            const notification = document.getElementById('notification');
+            const previewViewport = document.getElementById('preview-viewport');
+            const scaledWrapper = document.getElementById('scaled-wrapper');
+            const viewToggleGroup = document.getElementById('view-toggle-group');
+
+            const viewModes = {
+                desktop: { width: 1920, height: 1080 },
+                'mobile-portrait': { width: 390, height: 844 },
+                'mobile-landscape': { width: 844, height: 390 }
+            };
+            let currentViewMode = 'desktop';
+
+            // Define the structure of the GUI editor. This is the single source of truth.
+            const editorConfig = {
+                'Global Styles': {
+                    'page_wrapper_bg': { label: 'Page Background', type: 'color', default: '#464ab4', selector: '#page_wrapper', property: 'background-color' },
+                    'page_wrapper_color': { label: 'Page Text Color', type: 'color', default: '#ffffff', selector: '#page_wrapper', property: 'color', important: true },
+                },
+                'Tabs': {
+                    'tabs_bg': { label: 'Background', type: 'color', default: '#fa0000', selector: 'button[id$="-tab"]', property: 'background-color', important: true },
+                    'tabs_border_color': { label: 'Border Color', type: 'color', default: '#000000', selector: 'button[id$="-tab"]', property: 'border-color', important: true },
+                    'tabs_border_width': { label: 'Border Width', type: 'range', default: 2, min: 0, max: 20, unit: 'px', selector: 'button[id$="-tab"]', property: 'border-width', important: true },
+                    'tabs_border_radius': { label: 'Border Radius', type: 'range', default: 20, min: 0, max: 50, unit: 'px', selector: 'button[id$="-tab"]', property: 'border-radius', important: true },
+                },
+                'Widgets & Search': {
+                    'widget_search_bg': { label: 'Background', type: 'color', default: '#fa0000', selector: '.widget-container, .information-widget-search', property: 'background-color', important: true },
+                    'widget_search_border_color': { label: 'Border Color', type: 'color', default: '#000000', selector: '.widget-container, .information-widget-search', property: 'border-color', important: true },
+                    'widget_search_border_width': { label: 'Border Width', type: 'range', default: 2, min: 0, max: 20, unit: 'px', selector: '.widget-container, .information-widget-search', property: 'border-width', important: true },
+                    'widget_search_border_radius': { label: 'Border Radius', type: 'range', default: 20, min: 0, max: 50, unit: 'px', selector: '.widget-container, .information-widget-search', property: 'border-radius', important: true },
+                },
+                'Service Cards': {
+                    'service_card_bg': { label: 'Background', type: 'color', default: '#fa0000', selector: '.service-card', property: 'background-color', important: true },
+                    'service_card_border_color': { label: 'Border Color', type: 'color', default: '#000000', selector: '.service-card', property: 'border-color', important: true },
+                    'service_card_border_width': { label: 'Border Width', type: 'range', default: 2, min: 0, max: 20, unit: 'px', selector: '.service-card', property: 'border-width', important: true },
+                    'service_card_border_radius': { label: 'Border Radius', type: 'range', default: 20, min: 0, max: 50, unit: 'px', selector: '.service-card', property: 'border-radius', important: true },
+                },
+                'Bookmarks': {
+                    'bookmark_bg': { label: 'Background', type: 'color', default: '#fa0000', selector: '.bookmark-text, .bookmark-group h2, .bookmark-group .bookmark-section-title', property: 'background-color', important: true },
+                    'bookmark_border_color': { label: 'Border Color', type: 'color', default: '#000000', selector: '.bookmark-text, .bookmark-group h2, .bookmark-group .bookmark-section-title', property: 'border-color', important: true },
+                    'bookmark_border_width': { label: 'Border Width', type: 'range', default: 2, min: 0, max: 20, unit: 'px', selector: '.bookmark-text, .bookmark-group h2, .bookmark-group .bookmark-section-title', property: 'border-width', important: true },
+                    'bookmark_border_radius': { label: 'Border Radius', type: 'range', default: 20, min: 0, max: 50, unit: 'px', selector: '.bookmark-text, .bookmark-group h2, .bookmark-group .bookmark-section-title', property: 'border-radius', important: true },
+                }
+            };
+
+            const showNotification = (message, isError = false) => {
+                notification.textContent = message;
+                notification.className = `notification ${isError ? 'error' : 'success'} show`;
+                setTimeout(() => { notification.classList.remove('show'); }, 3000);
+            };
+
+            const updatePreviewScaling = () => {
+                if (!previewViewport.clientWidth || !previewViewport.clientHeight) return;
+    
+                const mode = viewModes[currentViewMode];
+                scaledWrapper.style.width = `${mode.width}px`;
+                scaledWrapper.style.height = `${mode.height}px`;
+                previewFrame.style.width = `${mode.width}px`;
+                previewFrame.style.height = `${mode.height}px`;
+    
+                // Always scale to fit the width of the preview pane and allow vertical scrolling.
+                previewViewport.style.overflowY = 'auto';
+                const scale = previewViewport.clientWidth / mode.width;
+                const x = 0;
+                const y = 0;
+    
+                scaledWrapper.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+            };
+
+            const generateCss = () => {
+                let cssText = '';
+                const rules = {};
+                const values = collectCssFromInputs();
+
+                // Iterate over sections in the config
+                for (const [sectionName, sectionControls] of Object.entries(editorConfig)) {
+                    // Find the checkbox for this section
+                    const sectionToggle = document.querySelector(`.section-toggle[data-section="${sectionName}"]`);
+
+                    // If the section is disabled via its toggle, skip generating its rules
+                    if (!sectionToggle || !sectionToggle.checked) {
+                        continue;
+                    }
+
+                    // Group properties by selector for this enabled section
+                    for (const [key, config] of Object.entries(sectionControls)) {
+                        if (!rules[config.selector]) {
+                            rules[config.selector] = [];
+                        }
+                        const value = values[key]
+                        const important = config.important ? ' !important' : '';
+                        rules[config.selector].push(`  ${config.property}: ${value}${important};`);
+                    }
+                }
+
+                // Build the CSS string
+                for (const [selector, properties] of Object.entries(rules)) {
+                    cssText += `${selector} {\n`;
+                    cssText += properties.join('\n');
+                    cssText += '\n}\n\n';
+                }
+                return cssText.trim();
+            };
+
+            const collectCssFromInputs = () => {
+                const updatedVars = {};
+                for (const section of Object.values(editorConfig)) {
+                    for (const [key, config] of Object.entries(section)) {
+                        const input = document.getElementById(`control-${key}`);
+                        if (input) {
+                            let value = input.value;
+                            if (config.unit) {
+                                value += config.unit;
+                            }
+                            updatedVars[key] = value;
+                        }
+                    }
+                }
+                return updatedVars;
+            };
+
+            const updatePreview = () => {
+                if (!previewFrame.contentWindow) return;
+                const css = generateCss();
+                previewFrame.contentWindow.postMessage({ type: 'update-css', css: css }, '*');
+            };
+
+            const handleInputChange = () => {
+                updatePreview();
+            };
+
+            const createControl = (key, config) => {
+                const id = `control-${key}`;
+                let controlHtml = `<div class="mb-4">
+                    <label for="${id}" class="block text-sm font-medium text-gray-300 mb-1">${config.label}</label>`;
+
+                let initialValue = config.default.toString();
+                if (config.type === 'range') {
+                    initialValue = parseFloat(initialValue) || config.default;
+                }
+
+                switch (config.type) {
+                    case 'color':
+                        controlHtml += `<input type="color" id="${id}" value="${initialValue}" class="w-full p-1 h-10 rounded">`;
+                        break;
+                    case 'range':
+                        controlHtml += `<div class="flex items-center space-x-2">
+                                            <input type="range" id="${id}" value="${initialValue}" min="${config.min || 0}" max="${config.max || 100}" class="w-full">
+                                            <span class="text-sm text-gray-400 w-16 text-right">${initialValue}${config.unit || ''}</span>
+                                        </div>`;
+                        break;
+                    case 'number':
+                        controlHtml += `<input type="number" id="${id}" value="${initialValue}" min="${config.min || 0}" max="${config.max || 100}" class="w-full p-2 rounded">`;
+                        break;
+                    case 'text':
+                    default:
+                        controlHtml += `<input type="text" id="${id}" value="${initialValue}" class="w-full p-2 rounded">`;
+                        break;
+                }
+                controlHtml += `</div>`;
+                return controlHtml;
+            };
+
+            const buildEditor = () => {
+                let editorHtml = '';
+                for (const [section, controls] of Object.entries(editorConfig)) {
+                    // Use replace to create a machine-friendly name for the data-section attribute
+                    const sectionId = section.replace(/\s|&/g, '-');
+                    editorHtml += `<div class="mb-2 last:mb-0">
+                        <div class="accordion-header p-3 font-semibold rounded-lg flex justify-between items-center">
+                            <span class="cursor-pointer flex-grow">${section}</span>
+                            <input type="checkbox" class="section-toggle form-checkbox h-5 w-5 text-blue-500 rounded bg-gray-700 border-gray-600 focus:ring-blue-500" data-section="${section}" checked title="Enable/Disable Section">
+                        </div>
+                        <div class="accordion-content bg-gray-700 p-4 rounded-b-lg">`;
+
+                    for (const [key, config] of Object.entries(controls)) {
+                        editorHtml += createControl(key, config);
+                    }
+
+                    editorHtml += `</div></div>`;
+                }
+                accordionContainer.innerHTML = editorHtml;
+            };
+
+            const resetToDefaults = async () => {
+                // 1. Reset the UI controls to their default values
+                Object.values(editorConfig).forEach(section => {
+                    Object.entries(section).forEach(([key, config]) => {
+                        const input = document.getElementById(`control-${key}`);
+                        if (input) {
+                            if (input.type === 'range') {
+                                input.value = parseFloat(config.default) || config.default;
+                                input.nextElementSibling.textContent = (parseFloat(config.default) || config.default) + (config.unit || '');
+                            } else {
+                                input.value = config.default;
+                            }
+                        }
+                    });
+                });
+
+                // Also reset the section toggles
+                document.querySelectorAll('.section-toggle').forEach(toggle => {
+                    toggle.checked = true;
+                });
+
+                // 2. Update the live preview to show the reset state
+                updatePreview();
+
+                // 3. Make an API call to clear the custom.css file
+                try {
+                    const response = await fetch('/editor/api/files/custom.css', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: '' }) // Send empty content to clear the file
+                    });
+                    showNotification(response.ok ? 'custom.css cleared and editor reset.' : 'Failed to clear custom.css.', !response.ok);
+                } catch (e) {
+                    showNotification('Error clearing custom.css file.', true);
+                }
+            };
+
+            const initializeEditor = () => {
+                buildEditor();
+                updatePreview();
+
+                // Add event listeners after building the editor
+                accordionContainer.addEventListener('input', (e) => {
+                    if (e.target.type === 'range') {
+                        const display = e.target.nextElementSibling;
+                        const key = e.target.id.replace('control-', '');
+                        // Find the config object for this key
+                        const config = Object.values(editorConfig).flatMap(s => Object.entries(s)).find(([k,v]) => k === key)[1];
+                        if (display) display.textContent = e.target.value + (config.unit || '');
+                    }
+                    handleInputChange();
+                });
+
+                // --- View Mode Toggle Logic ---
+                viewToggleGroup.addEventListener('click', (e) => {
+                    if (e.target.tagName === 'BUTTON') {
+                        const newView = e.target.dataset.view;
+                        if (newView === currentViewMode) return;
+
+                        currentViewMode = newView;
+                        // Update active button style
+                        viewToggleGroup.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+                        e.target.classList.add('active');
+                        updatePreviewScaling();
+                    }
+                });
+
+                // Accordion toggle logic
+                accordionContainer.querySelectorAll('.accordion-header span').forEach(headerSpan => {
+                    headerSpan.addEventListener('click', () => {
+                        const content = headerSpan.parentElement.nextElementSibling;
+                        if (content.style.maxHeight) {
+                            content.style.maxHeight = null;
+                        } else {
+                            // Close other open accordions
+                            accordionContainer.querySelectorAll('.accordion-content').forEach(c => c.style.maxHeight = null);
+                            content.style.maxHeight = content.scrollHeight + "px";
+                        }
+                    });
+                });
+            };
+
+            // --- Pane Resizing Logic ---
+            const editorPane = document.querySelector('.w-full.md\\:w-1\\/3');
+            const previewPane = document.querySelector('.w-full.md\\:w-2\\/3');
+            const resizeHandle = document.querySelector('.resize-handle');
+
+            let isResizing = false;
+            resizeHandle.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+            });
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                const totalWidth = document.body.clientWidth;
+                const newEditorWidth = Math.max(25, Math.min(75, (e.clientX / totalWidth) * 100));
+                editorPane.style.width = `${newEditorWidth}%`;
+                previewPane.style.width = `${100 - newEditorWidth}%`;
+                updatePreviewScaling(); // Recalculate scale on resize
+            });
+            document.addEventListener('mouseup', () => {
+                isResizing = false;
+                updatePreviewScaling(); // Final scale calculation
+                document.body.style.cursor = 'default';
+                document.body.style.userSelect = 'auto';
+            });
+
+            // --- Event Listeners ---
+
+            saveButton.addEventListener('click', async () => {
+                // Before saving, collect the current values from all inputs to ensure we have the complete state.
+                const cssToSave = generateCss();
+
+                try {
+                    const response = await fetch('/editor/api/files/custom.css', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: cssToSave })
+                    });
+                    const result = await response.json();
+                    showNotification(result.message, !response.ok);
+                } catch (e) {
+                    showNotification('Error saving file.', true);
+                }
+            });
+
+            resetButton.addEventListener('click', resetToDefaults);
+
+            previewFrame.addEventListener('load', updatePreview);
+
+            if (!homepageUrlInput.readOnly) {
+                homepageUrlInput.addEventListener('change', () => {
+                    const url = homepageUrlInput.value;
+                    if (url) {
+                        previewFrame.src = url;
+                        localStorage.setItem('homepagePreviewUrl', url);
+                    }
+                });
+            }
+
+            // --- Initialization ---
+
+            let initialUrl = homepageUrlInput.value;
+            if (!initialUrl) {
+                initialUrl = localStorage.getItem('homepagePreviewUrl') || '';
+                homepageUrlInput.value = initialUrl;
+            }
+            if (initialUrl) {
+                previewFrame.src = initialUrl;
+            } else {
+                console.warn("Homepage preview URL is not set. Preview will be blank.");
+            }
+
+            initializeEditor();
+            // Set initial scale and add a listener for window resize events
+            updatePreviewScaling();
+            window.addEventListener('resize', updatePreviewScaling);
+        });
+    </script>
+</body>
+
+</html>

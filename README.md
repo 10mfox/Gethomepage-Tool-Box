@@ -1,6 +1,6 @@
-# Media Manager - Recently Added Viewer
+# Media Manager & Homepage Tool-Box
 
-A simple, fast, and efficient web-based tool to view the "Recently Added" media from your media servers via the Tautulli and Jellystat APIs.
+A powerful, fast, and efficient web-based tool to manage your self-hosted services. It provides a "Recently Added" viewer for your media servers (Plex via Tautulli, Jellyfin/Emby via Jellystat) and includes a live front-end editor for your `gethomepage` configuration files.
 
 # Roadmap
 
@@ -9,14 +9,15 @@ A simple, fast, and efficient web-based tool to view the "Recently Added" media 
 - [x] Added Jellystat Support
 - [x] Basic Api For Tautulli and Jellystat Recently Added and Counts
 - [x] High-Performance Caching for API to reduce CPU usage and increase speed.
+- [x] Intelligent cache invalidation to automatically refresh data when changes are detected.
 - [x] Added Swagger UI for API Documentation.
+- [x] Live editor for all `gethomepage` configuration files (`/editor`).
+- [x] Visual CSS GUI editor for live theme customization (`/editor/css-gui`).
 
 ## In Progress
-- [ ] Fix Cache Not Updating When Something Has Changed
+- [ ] Add Audiobookshelf Support for "Recently Added".
 
 ## Planned
-- [ ] Add Audiobookshelf Support
-- [ ] Add A Way To Modify The Custom Api To Your Liking
 - [ ] Testing
 - [ ] Documentation
 - [ ] Final Deployment
@@ -27,6 +28,8 @@ A simple, fast, and efficient web-based tool to view the "Recently Added" media 
 ## Features
 
 - **Multi-Source Support**: Connects to both Tautulli (for Plex) and Jellystat (for Jellyfin/Emby) and allows you to switch between them seamlessly.
+- **Live Configuration Editor**: A full-featured editor at `/editor` that allows you to view and modify all of your `gethomepage` YAML, CSS, and JS configuration files directly from the browser.
+- **Live CSS GUI Editor**: A visual editor at `/editor/css-gui` with color pickers and sliders to customize your `gethomepage` theme and see the results instantly in a live preview pane.
 - **Smart Library Selection**: Dynamically fetches and lists your libraries from the selected source, with all libraries selected by default for immediate viewing.
 - **Grouped Display**: Displays recently added items grouped by library for clarity.
 - **Detailed Information**: Shows the item's title (formatted for movies, TV shows, and music), year, and when it was added.
@@ -54,43 +57,43 @@ This application is designed to be run as a Docker container.
 ### Prerequisites
 
 - Docker and Docker Compose.
-- A running instance of Tautulli connected to your Plex Media Server.
-- A running instance of Jellystat connected to your Jellyfin/Emby server.
-- Your Tautulli URL and API Key (found in Tautulli under `Settings` > `Web Interface` > `API`).
-- Your Jellystat URL and API Key (found in Jellystat under `Settings` > `General` > `API Keys`).
-### 1. Create `requirements.txt`
+- A running instance of Tautulli (for Plex) and/or Jellystat (for Jellyfin/Emby).
+- A folder containing your `gethomepage` configuration files (e.g., `services.yaml`, `custom.css`).
 
-Your project should contain a `requirements.txt` file with the following content to specify the Python dependencies:
-
-```txt
-Flask==3.0.3
-requests==2.32.3
-gunicorn==22.0.0
-flasgger==0.9.7.1
-```
-
-### 2. Create `docker-compose.yml`
+### 1. Create `docker-compose.yml`
 
 Create a file named `docker-compose.yml` in the same directory. This file will define the service and its configuration.
 
 ```dockercompose
 services:
-  gethomepage-tool-box:
-    container_name: Gethomepage-Tool-Box
-    image: ghcr.io/10mfox/gethomepage-tool-box:latest
-    ports:
-      - "5054:5000" # Map host port 5055 to container port 5000
-    environment:
-# --- Be sure to uncomment what you are using    
-      # --- Optional if you are not using Tautulli: Add your Tautulli details here ---
-#      - TAUTULLI_URL=http://0.0.0.0:8181
-#      - TAUTULLI_API_KEY=Your-Key-Here
+  redis:
+    image: "redis:alpine"
+    container_name: gethomepage-tool-box-redis
+    restart: unless-stopped
 
-      # --- Optional if you are not using Jellystat: Add your Jellystat details here ---
-#      - JELLYSTAT_URL=http://0.0.0.0:3000
-#      - JELLYSTAT_API_KEY=Your-Key-Here
+  media-manager:
+    image: ghcr.io/10mfox/gethomepage-tool-box:latest
+    container_name: gethomepage-tool-box
+    depends_on:
+      - redis
+    ports:
+      - "5053:5000"
+    environment:
+      # --- Tautulli / Jellystat Configuration ---
+      - TAUTULLI_URL=http://0.0.0.0:1234
+      - TAUTULLI_API_KEY=your_tautulli_key
+      - JELLYSTAT_URL=http://0.0.0.0:1234
+      - JELLYSTAT_API_KEY=your_jellystat_key
       
-    restart: always
+      # --- Homepage Editor Preview URL ---
+      - HOMEPAGE_PREVIEW_URL=https://your.homepage.url
+      
+      # --- Redis Configuration ---
+      - REDIS_HOST=redis
+    restart: unless-stopped
+    volumes:
+      # Mount your local gethomepage config folder into the container
+      - /path/to/your/homepage/config:/app/config
 ```
 
 **Important:** Replace the `TAUTULLI_URL` or `JELLYSTAT_URL` and `TAUTULLI_API_KEY` or `JELLYSTAT_API_KEY` with your actual Tautulli URL or Jellystat URL, and API key if they differ from the example.

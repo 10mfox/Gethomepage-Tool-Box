@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get-Homepage Config Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #1a202c; color: #e2e8f0; }
+        .card, .input-group { background-color: #2d3748; }
+        .btn { transition: background-color 0.2s; }
+        .btn-primary { background-color: #4299e1; }
+        .btn-primary:hover { background-color: #3182ce; }
+        .btn-secondary { background-color: #667eea; }
+        .btn-secondary:hover { background-color: #5a67d8; }
+        select, textarea, input { background-color: #4a5568; }
+        .view-toggle { background-color: #4a5568; }
+        .view-toggle:hover { background-color: #718096; }
+        .view-toggle.active {
+            background-color: #4299e1;
+            color: white;
+        }
+        input:read-only {
+            background-color: #2d3748; /* Match card background */
+            cursor: not-allowed;
+        }
+        #preview-container.hidden { display: none; }
+        /* Style for the resizable handle */
+        .resize-handle {
+            cursor: col-resize;
+            width: 10px;
+        }
+        @media (max-width: 768px) {
+            .resize-handle { display: none; }
+        }
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            color: white;
+            z-index: 50;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .notification.show { opacity: 1; }
+        .notification.success { background-color: #38a169; }
+        .notification.error { background-color: #c53030; }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col">
+    <header class="p-4 border-b border-gray-700">
+        <div class="max-w-full mx-auto flex justify-between items-center">
+            <h1 class="text-2xl md:text-4xl font-bold">Get-Homepage Config Editor</h1>
+            <div class="flex items-center space-x-4">
+                <a href="/editor/css-gui" class="text-blue-400 hover:text-blue-300">CSS GUI Editor &rarr;</a>
+                <a href="/" class="text-blue-400 hover:text-blue-300">&larr; Back to Media Manager</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow flex flex-col md:flex-row overflow-hidden">
+        <!-- Editor Pane -->
+        <div id="editor-pane" class="w-full md:w-1/2 p-4 flex flex-col">
+            <div class="card p-6 rounded-lg shadow-lg flex-grow flex flex-col">
+                <div class="mb-4">
+                    <label for="file-selector" class="block font-semibold mb-2">Select Configuration File:</label>
+                    <select id="file-selector" class="w-full p-2 rounded"></select>
+                </div>
+
+                <div class="mb-4 flex-grow flex flex-col">
+                    <label for="file-content" class="block font-semibold mb-2">Content: (min-height 24rem)</label>
+                    <textarea id="file-content" class="w-full h-full flex-grow p-2 rounded font-mono text-sm" spellcheck="false"></textarea>
+                </div>
+
+                <div class="flex justify-between items-center">
+                    <div class="space-x-4">
+                        <button id="undo-button" class="btn btn-secondary font-bold py-2 px-4 rounded">Undo</button>
+                        <button id="redo-button" class="btn btn-secondary font-bold py-2 px-4 rounded">Redo</button>
+                    </div>
+                    <button id="save-button" class="btn btn-primary font-bold py-2 px-4 rounded">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resize Handle -->
+        <div class="resize-handle bg-gray-700 hover:bg-blue-500 transition-colors hidden md:block"></div>
+
+        <!-- Preview Pane -->
+        <div id="preview-container" class="w-full md:w-1/2 p-4 flex-col hidden">
+            <div class="input-group p-4 rounded-lg shadow-lg mb-4 flex flex-col space-y-4">
+                <div>
+                    <label for="homepage-url" class="block font-semibold mb-2">Homepage URL for Preview:</label>
+                    <input type="text" id="homepage-url" class="w-full p-2 rounded" placeholder="Set HOMEPAGE_PREVIEW_URL in docker-compose.yml" value="{{ homepage_preview_url }}" {% if homepage_preview_url %}readonly{% endif %}>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-2">Preview Mode:</label>
+                    <div id="view-toggle-group" class="flex space-x-2">
+                        <button data-view="desktop" class="view-toggle btn font-bold py-2 px-4 rounded active">Desktop</button>
+                        <button data-view="mobile-portrait" class="view-toggle btn font-bold py-2 px-4 rounded">Portrait</button>
+                        <button data-view="mobile-landscape" class="view-toggle btn font-bold py-2 px-4 rounded">Landscape</button>
+                    </div>
+                </div>
+            </div>
+            <div id="preview-viewport" class="flex-grow bg-gray-800 rounded-lg overflow-hidden relative">
+                <div id="scaled-wrapper" style="width: 1920px; height: 1080px; transform-origin: 0 0;">
+                     <iframe id="preview-frame" style="width: 1920px; height: 1080px;" class="border-0"></iframe>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileSelector = document.getElementById('file-selector');
+            const fileContent = document.getElementById('file-content');
+            const saveButton = document.getElementById('save-button');
+            const undoButton = document.getElementById('undo-button');
+            const redoButton = document.getElementById('redo-button');
+            const notification = document.getElementById('notification');
+            const previewContainer = document.getElementById('preview-container');
+            const homepageUrlInput = document.getElementById('homepage-url');
+            const previewFrame = document.getElementById('preview-frame');
+            const previewViewport = document.getElementById('preview-viewport');
+            const scaledWrapper = document.getElementById('scaled-wrapper');
+            const viewToggleGroup = document.getElementById('view-toggle-group');
+            let currentFile = '';
+
+            // --- Live Preview Logic ---
+            let cssStyleElement = null;
+            let jsScriptElement = null;
+
+            const viewModes = {
+                desktop: { width: 1920, height: 1080 },
+                'mobile-portrait': { width: 390, height: 844 },
+                'mobile-landscape': { width: 844, height: 390 }
+            };
+            let currentViewMode = 'desktop';
+
+
+            const showNotification = (message, isError = false) => {
+                notification.textContent = message;
+                notification.className = `notification ${isError ? 'error' : 'success'} show`;
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                }, 3000);
+            };
+
+            const updatePreviewScaling = () => {
+                if (!previewViewport.clientWidth || !previewViewport.clientHeight) return;
+    
+                const mode = viewModes[currentViewMode];
+                scaledWrapper.style.width = `${mode.width}px`;
+                scaledWrapper.style.height = `${mode.height}px`;
+                previewFrame.style.width = `${mode.width}px`;
+                previewFrame.style.height = `${mode.height}px`;
+    
+                // Always scale to fit the width of the preview pane and allow vertical scrolling.
+                previewViewport.style.overflowY = 'auto';
+                const scale = previewViewport.clientWidth / mode.width;
+                const x = 0;
+                const y = 0;
+    
+                scaledWrapper.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+            };
+
+            const updatePreview = () => {
+                if (!previewFrame.contentWindow) return;
+                
+                if (currentFile === 'custom.css') {
+                    // Use postMessage to securely send CSS to the iframe
+                    previewFrame.contentWindow.postMessage({ type: 'update-css', css: fileContent.value }, '*');
+                } else if (currentFile === 'custom.js') {
+                    // Use postMessage to securely send JS to the iframe
+                    previewFrame.contentWindow.postMessage({ type: 'update-js', js: fileContent.value }, '*');
+                }
+            };
+
+            const togglePreviewPane = (filename) => {
+                if (filename === 'custom.css' || filename === 'custom.js') {
+                    previewContainer.classList.remove('hidden');
+                    previewContainer.classList.add('flex');
+                } else {
+                    previewContainer.classList.add('hidden');
+                    previewContainer.classList.remove('flex');
+                }
+            };
+
+            // Only allow editing and saving to localStorage if the URL is not set via environment variable
+            if (!homepageUrlInput.readOnly) {
+                homepageUrlInput.addEventListener('change', () => {
+                    const url = homepageUrlInput.value;
+                    if (url) {
+                        previewFrame.src = url;
+                        localStorage.setItem('homepagePreviewUrl', url);
+                    }
+                });
+            }
+
+            previewFrame.addEventListener('load', updatePreview); // Re-apply on iframe reload
+
+            const loadFiles = async () => {
+                const response = await fetch('/editor/api/files');
+                const files = await response.json();
+                fileSelector.innerHTML = files.map(f => `<option value="${f}">${f}</option>`).join('');
+                if (files.length > 0) {
+                    fileSelector.dispatchEvent(new Event('change'));
+                }
+            };
+
+            fileSelector.addEventListener('change', async (e) => {
+                currentFile = e.target.value;
+                const response = await fetch(`/editor/api/files/${currentFile}`);
+                const result = await response.json();
+                fileContent.value = result.content;
+                togglePreviewPane(currentFile);
+                // Reset preview elements when switching files
+                cssStyleElement = null;
+                jsScriptElement = null;
+                updatePreview(); // Apply content to preview on load
+            });
+
+            saveButton.addEventListener('click', async () => {
+                const response = await fetch(`/editor/api/files/${currentFile}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: fileContent.value })
+                });
+                const result = await response.json();
+                showNotification(result.message, !response.ok);
+            });
+
+            fileContent.addEventListener('input', updatePreview);
+
+            // --- Undo/Redo Logic ---
+            // Using the browser's built-in (but deprecated) execCommand is the simplest
+            // way to add this functionality without a complex history stack. It works
+            // reliably for this use case.
+            const handleUndoRedo = (e) => {
+                // Prevent the button from taking focus away from the textarea
+                e.preventDefault();
+                fileContent.focus();
+                document.execCommand(e.target.id === 'undo-button' ? 'undo' : 'redo', false, null);
+                updatePreview(); // Ensure preview updates after undo/redo
+            };
+            undoButton.addEventListener('mousedown', handleUndoRedo);
+            redoButton.addEventListener('mousedown', handleUndoRedo);
+
+            // --- View Mode Toggle Logic ---
+            viewToggleGroup.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const newView = e.target.dataset.view;
+                    if (newView === currentViewMode) return;
+
+                    currentViewMode = newView;
+                    // Update active button style
+                    viewToggleGroup.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+                    updatePreviewScaling();
+                }
+            });
+
+            // --- Pane Resizing Logic ---
+            const editorPane = document.getElementById('editor-pane');
+            const resizeHandle = document.querySelector('.resize-handle');
+
+            let isResizing = false;
+            resizeHandle.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+            });
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                const totalWidth = document.body.clientWidth;
+                // Clamp resizing to prevent panes from becoming too small
+                const newEditorWidth = Math.max(25, Math.min(75, (e.clientX / totalWidth) * 100));
+                editorPane.style.width = `${newEditorWidth}%`;
+                previewContainer.style.width = `${100 - newEditorWidth}%`;
+                updatePreviewScaling(); // Recalculate scale on resize
+            });
+            document.addEventListener('mouseup', () => {
+                isResizing = false;
+                updatePreviewScaling(); // Final scale calculation
+                document.body.style.cursor = 'default';
+                document.body.style.userSelect = 'auto';
+            });
+
+            // Initialize the preview frame
+            let initialUrl = homepageUrlInput.value; // This is set by the backend
+            if (!initialUrl) {
+                // Fallback to localStorage if env var is not set
+                initialUrl = localStorage.getItem('homepagePreviewUrl') || '';
+                homepageUrlInput.value = initialUrl;
+            }
+            if (initialUrl) previewFrame.src = initialUrl;
+
+            loadFiles();
+            // Set initial scale and add a listener for window resize events
+            updatePreviewScaling();
+            window.addEventListener('resize', updatePreviewScaling);
+        });
+    </script>
+</body>
+
+</html>

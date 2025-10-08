@@ -2,7 +2,7 @@ import os
 import requests
 from flask import Flask, render_template, request, jsonify
 from flasgger import Swagger, swag_from
-from datetime import datetime
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import logging
@@ -10,6 +10,10 @@ import time
 
 app = Flask(__name__, template_folder='.')
 swagger = Swagger(app)
+
+# --- Editor Blueprint ---
+from editor import editor_bp
+app.register_blueprint(editor_bp, url_prefix='/editor')
 
 # Read configuration from environment variables
 TAUTULLI_URL = os.environ.get('TAUTULLI_URL')
@@ -53,7 +57,7 @@ def _process_jellystat_items(items):
         added_at_str = item.get('DateCreated')
         added_at_ts = 0
         if added_at_str:
-            added_at_ts = int(datetime.strptime(added_at_str.split('.')[0], '%Y-%m-%dT%H:%M:%S').timestamp())
+            added_at_ts = int(datetime.fromisoformat(added_at_str.replace('Z', '+00:00')).timestamp())
 
         processed_items.append({
             'title': display_title,

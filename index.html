@@ -20,23 +20,27 @@
 <body class="p-4 md:p-8">
     <div class="max-w-6xl mx-auto">
         <div class="flex justify-center items-baseline gap-x-3 mb-6">
-            <h1 class="text-4xl font-bold">Recently Added Manager</h1>
+            <h1 class="text-3xl md:text-4xl font-bold text-center">Recently Added Manager</h1>
             <div id="app-version" class="text-sm text-gray-400"></div>
+        </div>
+        <div class="flex justify-center gap-x-4 mb-6">
+            <a href="/editor" class="text-blue-400 hover:text-blue-300">Config Editor</a>
+            <a href="/editor/css-gui" class="text-blue-400 hover:text-blue-300">CSS GUI Editor</a>
         </div>
         
         <!-- Configuration -->
         <div id="config-card" class="card p-6 rounded-lg shadow-lg mb-8">
-            <div class="flex justify-between items-start">
+            <div class="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
                 <h2 id="main-title" class="text-2xl font-semibold">Recently Added</h2>
-                <div class="flex items-center space-x-4">
+                <div class="flex flex-col items-start space-y-2 md:flex-row md:items-center md:space-y-0 md:space-x-4">
                     <div id="source-selector-container" class="hidden items-center space-x-2">
                         <label for="source-selector" class="font-semibold">Source:</label>
                         <select id="source-selector" class="p-2 rounded" style="background-color: #4a5568;"></select>
                     </div>
                     <label for="library-selector" class="font-semibold">Select Library:</label>
-                    <div id="library-selector" class="flex flex-wrap gap-x-4 gap-y-2 p-2 rounded" style="background-color: #4a5568;"><p>-- Loading Libraries --</p></div>
+                    <div id="library-selector" class="flex flex-wrap gap-x-4 gap-y-2 p-2 rounded w-full md:w-auto" style="background-color: #4a5568;"><p>-- Loading Libraries --</p></div>
                 </div>
-                <div class="flex items-center space-x-4">
+                <div class="flex flex-col items-start space-y-2 md:flex-row md:items-center md:space-y-0 md:space-x-4">
                     <label class="font-semibold">Date Format:</label>
                     <div id="date-format-selector" class="flex flex-wrap gap-x-4 gap-y-2 p-2 rounded" style="background-color: #4a5568;">
                         <div class="flex items-center">
