@@ -10,7 +10,7 @@ A powerful, fast, and efficient web-based tool to manage your self-hosted servic
 - [x] Basic Api For Tautulli and Jellystat Recently Added and Counts
 - [x] High-Performance Caching for API to reduce CPU usage and increase speed.
 - [x] Intelligent cache invalidation to automatically refresh data when changes are detected.
-- [x] Added Swagger UI for API Documentation.
+- [x] Added Swagger UI for API Documentation (`/apidocs`).
 - [x] Live editor for all `gethomepage` configuration files (`/editor`).
 - [x] Visual CSS GUI editor for live theme customization (`/editor/css-gui`).
 
