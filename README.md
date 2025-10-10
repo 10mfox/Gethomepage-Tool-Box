@@ -2,32 +2,7 @@
 
 A powerful, fast, and efficient web-based tool to manage your self-hosted services. It provides a "Recently Added" viewer for your media servers (Plex via Tautulli, Jellyfin/Emby via Jellystat) and includes a live front-end editor for your `gethomepage` configuration files.
 
-# Roadmap
-
-## Completed
-- [x] Added Tautulli Support
-- [x] Added Jellystat Support
-- [x] Basic Api For Tautulli and Jellystat Recently Added and Counts
-- [x] High-Performance Caching for API to reduce CPU usage and increase speed.
-- [x] Intelligent cache invalidation to automatically refresh data when changes are detected.
-- [x] Added Swagger UI for API Documentation (`/apidocs`).
-- [x] Live editor for all `gethomepage` configuration files (`/editor`).
-- [x] Visual CSS GUI editor for live theme customization (`/editor/css-gui`).
-
-## In Progress
-- [ ] Working on Jellystat currently broken.
-- [ ] Currently working on Tautulli not keeping api up to date  
-
-## Planned
-- [ ] Add Audiobookshelf Support for "Recently Added".
-- [ ] Testing
-- [ ] Documentation
-- [ ] Final Deployment
-- [ ] Final Performance Optimization
-
- <!-- It's recommended to replace this with an actual screenshot -->
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/S6S6S178E)
+:arrow_right: **[Click here to see my project ideas and roadmap](./ideas.md)**
 
 ## Features
 
