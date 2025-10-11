@@ -77,7 +77,7 @@ services:
       - /path/to/your/homepage/config:/app/config
 ```
 
-**Important:** Replace the `TAUTULLI_URL` or `JELLYSTAT_URL` or 'AUDIOBOOKSHELF_URL' and `TAUTULLI_API_KEY` or `JELLYSTAT_API_KEY` or 'AUDIOBOOKSHELF_API_KEY' with your actual Tautulli URL or Jellystat URL or Audiobookshelf URL, and API key if they differ from the example.
+**Important:** Replace the `TAUTULLI_URL` or `JELLYSTAT_URL` or `AUDIOBOOKSHELF_URL` and `TAUTULLI_API_KEY` or `JELLYSTAT_API_KEY` or `AUDIOBOOKSHELF_API_KEY` with your actual Tautulli URL or Jellystat URL or Audiobookshelf URL, and API key if they differ from the example.
 
 ### 3. Run the Application
 
