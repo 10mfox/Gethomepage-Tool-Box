@@ -54,6 +54,19 @@
                     <button id="reset-button" class="btn btn-secondary font-bold py-2 px-4 rounded">Reset to Defaults</button>
                     <button id="save-css-button" class="btn btn-primary font-bold py-2 px-4 rounded">Save to custom.css</button>
                 </div>
+                <!-- Theme Management Section -->
+                <div class="input-group p-4 rounded-lg shadow-inner mb-4">
+                    <h3 class="text-lg font-semibold mb-2">Theme Management</h3>
+                    <div class="flex flex-col space-y-3">
+                        <input type="text" id="theme-name-input" placeholder="Enter new theme name..." class="w-full p-2 rounded">
+                        <select id="theme-selector" class="w-full p-2 rounded"></select>
+                        <div class="flex justify-between space-x-2">
+                            <button id="save-theme-button" class="btn btn-primary font-bold py-2 px-4 rounded w-1/3">Save</button>
+                            <button id="load-theme-button" class="btn btn-secondary font-bold py-2 px-4 rounded w-1/3">Load</button>
+                            <button id="delete-theme-button" class="btn btn-delete bg-red-600 hover:bg-red-700 font-bold py-2 px-4 rounded w-1/3">Delete</button>
+                        </div>
+                    </div>
+                </div>
                 <div id="settings-accordion">
                     <!-- Accordion sections will be injected here by JavaScript -->
                 </div>
@@ -100,6 +113,11 @@
             const previewViewport = document.getElementById('preview-viewport');
             const scaledWrapper = document.getElementById('scaled-wrapper');
             const viewToggleGroup = document.getElementById('view-toggle-group');
+            const themeNameInput = document.getElementById('theme-name-input');
+            const themeSelector = document.getElementById('theme-selector');
+            const saveThemeButton = document.getElementById('save-theme-button');
+            const loadThemeButton = document.getElementById('load-theme-button');
+            const deleteThemeButton = document.getElementById('delete-theme-button');
 
             const viewModes = {
                 desktop: { width: 1920, height: 1080 },
@@ -107,6 +125,8 @@
                 'mobile-landscape': { width: 844, height: 390 }
             };
             let currentViewMode = 'desktop';
+
+            const THEME_STORAGE_KEY = 'cssGuiThemes';
 
             // Define the structure of the GUI editor. This is the single source of truth.
             const editorConfig = {
@@ -119,24 +139,28 @@
                     'tabs_border_color': { label: 'Border Color', type: 'color', default: '#000000', selector: 'button[id$="-tab"]', property: 'border-color', important: true },
                     'tabs_border_width': { label: 'Border Width', type: 'range', default: 2, min: 0, max: 20, unit: 'px', selector: 'button[id$="-tab"]', property: 'border-width', important: true },
                     'tabs_border_radius': { label: 'Border Radius', type: 'range', default: 20, min: 0, max: 50, unit: 'px', selector: 'button[id$="-tab"]', property: 'border-radius', important: true },
+                    'tabs_padding': { label: 'Padding', type: 'range', default: 10, min: 0, max: 50, unit: 'px', selector: 'button[id$="-tab"]', property: 'padding', important: true },
                 },
                 'Widgets & Search': {
                     'widget_search_bg': { label: 'Background', type: 'color', default: '#fa0000', selector: '.widget-container, .information-widget-search', property: 'background-color', important: true },
                     'widget_search_border_color': { label: 'Border Color', type: 'color', default: '#000000', selector: '.widget-container, .information-widget-search', property: 'border-color', important: true },
                     'widget_search_border_width': { label: 'Border Width', type: 'range', default: 2, min: 0, max: 20, unit: 'px', selector: '.widget-container, .information-widget-search', property: 'border-width', important: true },
                     'widget_search_border_radius': { label: 'Border Radius', type: 'range', default: 20, min: 0, max: 50, unit: 'px', selector: '.widget-container, .information-widget-search', property: 'border-radius', important: true },
+                    'widget_search_padding': { label: 'Padding', type: 'range', default: 10, min: 0, max: 50, unit: 'px', selector: '.widget-container, .information-widget-search', property: 'padding', important: true },
                 },
                 'Service Cards': {
                     'service_card_bg': { label: 'Background', type: 'color', default: '#fa0000', selector: '.service-card', property: 'background-color', important: true },
                     'service_card_border_color': { label: 'Border Color', type: 'color', default: '#000000', selector: '.service-card', property: 'border-color', important: true },
                     'service_card_border_width': { label: 'Border Width', type: 'range', default: 2, min: 0, max: 20, unit: 'px', selector: '.service-card', property: 'border-width', important: true },
                     'service_card_border_radius': { label: 'Border Radius', type: 'range', default: 20, min: 0, max: 50, unit: 'px', selector: '.service-card', property: 'border-radius', important: true },
+                    'service_card_padding': { label: 'Padding', type: 'range', default: 10, min: 0, max: 50, unit: 'px', selector: '.service-card', property: 'padding', important: true },
                 },
                 'Bookmarks': {
                     'bookmark_bg': { label: 'Background', type: 'color', default: '#fa0000', selector: '.bookmark-text, .bookmark-group h2, .bookmark-group .bookmark-section-title', property: 'background-color', important: true },
                     'bookmark_border_color': { label: 'Border Color', type: 'color', default: '#000000', selector: '.bookmark-text, .bookmark-group h2, .bookmark-group .bookmark-section-title', property: 'border-color', important: true },
                     'bookmark_border_width': { label: 'Border Width', type: 'range', default: 2, min: 0, max: 20, unit: 'px', selector: '.bookmark-text, .bookmark-group h2, .bookmark-group .bookmark-section-title', property: 'border-width', important: true },
                     'bookmark_border_radius': { label: 'Border Radius', type: 'range', default: 20, min: 0, max: 50, unit: 'px', selector: '.bookmark-text, .bookmark-group h2, .bookmark-group .bookmark-section-title', property: 'border-radius', important: true },
+                    'bookmark_padding': { label: 'Padding', type: 'range', default: 10, min: 0, max: 50, unit: 'px', selector: '.bookmark-text, .bookmark-group h2, .bookmark-group .bookmark-section-title', property: 'padding', important: true },
                 }
             };
 
@@ -166,8 +190,9 @@
 
             const generateCss = () => {
                 let cssText = '';
-                const rules = {};
                 const values = collectCssFromInputs();
+
+                const rules = {};
 
                 // Iterate over sections in the config
                 for (const [sectionName, sectionControls] of Object.entries(editorConfig)) {
@@ -181,10 +206,11 @@
 
                     // Group properties by selector for this enabled section
                     for (const [key, config] of Object.entries(sectionControls)) {
+
                         if (!rules[config.selector]) {
                             rules[config.selector] = [];
                         }
-                        const value = values[key]
+                        const value = values[key];
                         const important = config.important ? ' !important' : '';
                         rules[config.selector].push(`  ${config.property}: ${value}${important};`);
                     }
@@ -238,7 +264,10 @@
 
                 switch (config.type) {
                     case 'color':
-                        controlHtml += `<input type="color" id="${id}" value="${initialValue}" class="w-full p-1 h-10 rounded">`;
+                        controlHtml += `<div class="flex items-center space-x-2">
+                                            <input type="color" id="${id}" value="${initialValue}" class="p-1 h-10 rounded" style="min-width: 4rem;">
+                                            <input type="text" id="${id}-text" value="${initialValue}" class="w-full p-2 rounded font-mono text-sm">
+                                        </div>`;
                         break;
                     case 'range':
                         controlHtml += `<div class="flex items-center space-x-2">
@@ -279,6 +308,77 @@
                 accordionContainer.innerHTML = editorHtml;
             };
 
+            // --- Theme Management ---
+            const getThemes = () => {
+                return JSON.parse(localStorage.getItem(THEME_STORAGE_KEY) || '{}');
+            };
+
+            const saveTheme = (name, settings) => {
+                const themes = getThemes();
+                themes[name] = settings;
+                localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(themes));
+            };
+
+            const deleteTheme = (name) => {
+                const themes = getThemes();
+                delete themes[name];
+                localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(themes));
+            };
+
+            const populateThemeSelector = () => {
+                const themes = getThemes();
+                const themeNames = Object.keys(themes).sort();
+                themeSelector.innerHTML = themeNames.map(name => `<option value="${name}">${name}</option>`).join('');
+                if (themeNames.length === 0) {
+                    themeSelector.innerHTML = '<option disabled>No saved themes</option>';
+                }
+            };
+
+            const applyTheme = (settings) => {
+                // Apply values to controls
+                for (const [key, value] of Object.entries(settings.values)) {
+                    const input = document.getElementById(`control-${key}`);
+                    if (input) {
+                        input.value = value;
+                        // Manually trigger updates for linked inputs (color text, range display)
+                        if (input.type === 'color') {
+                            const textInput = document.getElementById(`${input.id}-text`);
+                            if (textInput) textInput.value = value;
+                        } else if (input.type === 'range') {
+                            const display = input.nextElementSibling;
+                            const config = Object.values(editorConfig).flatMap(s => Object.entries(s)).find(([k,v]) => k === key)[1];
+                            if (display && config) display.textContent = value + (config.unit || '');
+                        }
+                    }
+                }
+
+                // Apply section toggle states
+                document.querySelectorAll('.section-toggle').forEach(toggle => {
+                    const sectionName = toggle.dataset.section;
+                    toggle.checked = settings.sections[sectionName] !== false; // Default to checked if not in settings
+                });
+
+                updatePreview();
+                showNotification('Theme loaded successfully.');
+            };
+
+            const handleSaveTheme = () => {
+                const name = themeNameInput.value.trim();
+                if (!name) {
+                    showNotification('Please enter a name for the theme.', true);
+                    return;
+                }
+                const values = collectCssFromInputs();
+                const sections = {};
+                document.querySelectorAll('.section-toggle').forEach(toggle => {
+                    sections[toggle.dataset.section] = toggle.checked;
+                });
+                saveTheme(name, { values, sections });
+                populateThemeSelector();
+                themeSelector.value = name; // Select the newly saved theme
+                showNotification(`Theme '${name}' saved.`);
+            };
+
             const resetToDefaults = async () => {
                 // 1. Reset the UI controls to their default values
                 Object.values(editorConfig).forEach(section => {
@@ -290,6 +390,10 @@
                                 input.nextElementSibling.textContent = (parseFloat(config.default) || config.default) + (config.unit || '');
                             } else {
                                 input.value = config.default;
+                            }
+                            if (input.type === 'color') {
+                                const textInput = document.getElementById(`${input.id}-text`);
+                                if (textInput) textInput.value = config.default;
                             }
                         }
                     });
@@ -322,13 +426,27 @@
 
                 // Add event listeners after building the editor
                 accordionContainer.addEventListener('input', (e) => {
+                    const key = e.target.id.replace('control-', '').replace('-text', '');
+                    const config = Object.values(editorConfig).flatMap(s => Object.entries(s)).find(([k,v]) => k === key)?.[1];
+                    if (!config) return;
+
                     if (e.target.type === 'range') {
                         const display = e.target.nextElementSibling;
-                        const key = e.target.id.replace('control-', '');
-                        // Find the config object for this key
-                        const config = Object.values(editorConfig).flatMap(s => Object.entries(s)).find(([k,v]) => k === key)[1];
                         if (display) display.textContent = e.target.value + (config.unit || '');
+                    } else if (e.target.type === 'color') {
+                        const textInput = document.getElementById(e.target.id + '-text');
+                        if (textInput) textInput.value = e.target.value;
+                    } else if (e.target.type === 'text' && e.target.id.endsWith('-text')) {
+                        const colorInput = document.getElementById(e.target.id.replace('-text', ''));
+                        // Use a simple regex to check for a valid hex color format
+                        if (colorInput && /^#([0-9A-F]{3}){1,2}$/i.test(e.target.value)) {
+                            colorInput.value = e.target.value;
+                        } else {
+                            // Don't update preview if the hex is invalid to avoid errors
+                            return;
+                        }
                     }
+
                     handleInputChange();
                 });
 
@@ -358,6 +476,32 @@
                             content.style.maxHeight = content.scrollHeight + "px";
                         }
                     });
+                });
+
+                // Theme management event listeners
+                saveThemeButton.addEventListener('click', handleSaveTheme);
+
+                loadThemeButton.addEventListener('click', () => {
+                    const name = themeSelector.value;
+                    if (!name) {
+                        showNotification('No theme selected to load.', true);
+                        return;
+                    }
+                    const themes = getThemes();
+                    if (themes[name]) {
+                        applyTheme(themes[name]);
+                    }
+                });
+
+                deleteThemeButton.addEventListener('click', () => {
+                    const name = themeSelector.value;
+                    if (!name) {
+                        showNotification('No theme selected to delete.', true);
+                        return;
+                    }
+                    deleteTheme(name);
+                    populateThemeSelector();
+                    showNotification(`Theme '${name}' deleted.`);
                 });
             };
 
@@ -434,6 +578,7 @@
             }
 
             initializeEditor();
+            populateThemeSelector();
             // Set initial scale and add a listener for window resize events
             updatePreviewScaling();
             window.addEventListener('resize', updatePreviewScaling);

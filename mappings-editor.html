@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get-Homepage Mappings Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #1a202c; color: #e2e8f0; }
+        .card, .input-group { background-color: #2d3748; }
+        .btn { transition: background-color 0.2s; }
+        .btn-primary { background-color: #4299e1; }
+        .btn-primary:hover { background-color: #3182ce; }
+        .btn-secondary { background-color: #667eea; }
+        .btn-secondary:hover { background-color: #5a67d8; }
+        input, textarea { background-color: #4a5568; }
+        .field-tag {
+            background-color: #4a5568;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .field-tag:hover { background-color: #718096; }
+        .notification {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            padding: 1rem 2rem; border-radius: 0.5rem; color: white; z-index: 50;
+            opacity: 0; transition: opacity 0.5s ease-in-out;
+        }
+        .notification.show { opacity: 1; }
+        .notification.success { background-color: #38a169; }
+        .notification.error { background-color: #c53030; }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col">
+    <header class="p-4 border-b border-gray-700">
+        <div class="max-w-full mx-auto flex justify-between items-center">
+            <h1 class="text-2xl md:text-4xl font-bold">Mappings Editor</h1>
+            <div class="flex items-center space-x-4">
+                <a href="/editor" class="text-blue-400 hover:text-blue-300">&larr; Config Editor</a>
+                <a href="/editor/debug-raw" class="text-blue-400 hover:text-blue-300">Raw Data Viewer &rarr;</a>
+                <a href="/" class="text-blue-400 hover:text-blue-300">&larr; Back to Media Manager</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow p-4 overflow-y-auto">
+        <div class="max-w-6xl mx-auto">
+            <div class="card p-6 rounded-lg shadow-lg mb-4">
+                <h2 class="text-xl font-semibold mb-2">How it works</h2>
+                <p class="text-gray-400">
+                    Use this editor to customize how item titles are displayed in the "Recently Added" list. For each source and media type, you can define a template string. Click on the available fields to insert them into your template.
+                </p>
+            </div>
+            <div id="mappings-container" class="space-y-8">
+                <!-- Mappings will be injected here by JavaScript -->
+            </div>
+            <div class="mt-8 flex justify-end space-x-4">
+                <button id="reset-button" class="btn btn-secondary font-bold py-2 px-4 rounded">Reset to Defaults</button>
+                <button id="save-button" class="btn btn-primary font-bold py-2 px-4 rounded">Save Mappings</button>
+            </div>
+        </div>
+    </main>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const mappingsContainer = document.getElementById('mappings-container');
+            const saveButton = document.getElementById('save-button');
+            const resetButton = document.getElementById('reset-button');
+            const notification = document.getElementById('notification');
+            let currentMappings = {}; // Store the loaded mappings in memory
+
+            const showNotification = (message, isError = false) => {
+                notification.textContent = message;
+                notification.className = `notification ${isError ? 'error' : 'success'} show`;
+                setTimeout(() => { notification.classList.remove('show'); }, 3000);
+            };
+
+            const buildEditor = (mappings) => {
+                let html = '';
+                for (const [source, types] of Object.entries(mappings)) {
+                    html += `<div class="card p-6 rounded-lg shadow-lg">
+                                <h2 class="text-2xl font-bold capitalize mb-4">${source}</h2>
+                                <div class="space-y-6">`;
+                    for (const [type, config] of Object.entries(types)) {
+                        const fieldsHtml = config.fields.map(field => 
+                            `<span class="field-tag inline-block rounded-full px-3 py-1 text-sm font-semibold mr-2 mb-2" data-field="${field}">{${field}}</span>`
+                        ).join('');
+
+                        html += `<div class="mapping-item" data-source="${source}" data-type="${type}">
+                                    <h3 class="text-lg font-semibold capitalize mb-2">${type}</h3>
+                                    <label class="block text-sm font-medium text-gray-300 mb-1">Template:</label>
+                                    <input type="text" class="template-input w-full p-2 rounded font-mono" value="${config.template}">
+                                    <div class="mt-2">
+                                        <p class="text-sm text-gray-400 mb-1">Available fields (click to insert):</p>
+                                        <div class="flex flex-wrap">${fieldsHtml}</div>
+                                    </div>
+                                 </div>`;
+                    }
+                    html += `</div></div>`;
+                }
+                mappingsContainer.innerHTML = html;
+            };
+
+            const loadMappings = async (useDefaults = false) => {
+                const url = useDefaults ? '/editor/api/mappings/default' : '/editor/api/mappings';
+                try {
+                    const response = await fetch(url);
+                    const mappings = await response.json();
+                    currentMappings = mappings; // Store the loaded mappings
+                    buildEditor(mappings);
+                } catch (e) {
+                    showNotification('Failed to load mappings.', true);
+                }
+            };
+
+            const collectMappingsFromUI = () => {
+                // Create a deep copy to avoid modifying the stored mappings directly
+                const updatedMappings = JSON.parse(JSON.stringify(currentMappings));
+
+                document.querySelectorAll('.mapping-item').forEach(item => {
+                    const source = item.dataset.source;
+                    const type = item.dataset.type;
+                    const template = item.querySelector('.template-input').value;
+                    
+                    // Only update the template value, preserving the other properties like 'fields'
+                    if (updatedMappings[source] && updatedMappings[source][type]) {
+                        updatedMappings[source][type].template = template;
+                    }
+                });
+                return updatedMappings;
+            };
+
+            saveButton.addEventListener('click', async () => {
+                const mappings = collectMappingsFromUI();
+                try {
+                    const response = await fetch('/editor/api/mappings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(mappings)
+                    });
+                    const result = await response.json();
+                    showNotification(result.message, !response.ok);
+                } catch (e) {
+                    showNotification('Error saving mappings.', true);
+                }
+            });
+
+            resetButton.addEventListener('click', () => {
+                if (confirm('Are you sure you want to reset all mappings to their default values?')) {
+                    loadMappings(true);
+                    showNotification('Mappings reset to default. Click "Save Mappings" to apply.');
+                }
+            });
+
+            mappingsContainer.addEventListener('click', (e) => {
+                if (e.target.classList.contains('field-tag')) {
+                    const field = e.target.textContent;
+                    const input = e.target.closest('.mapping-item').querySelector('.template-input');
+                    
+                    // Insert the field at the current cursor position
+                    const start = input.selectionStart;
+                    const end = input.selectionEnd;
+                    const text = input.value;
+                    input.value = text.substring(0, start) + field + text.substring(end);
+                    input.focus();
+                    input.selectionStart = input.selectionEnd = start + field.length;
+                }
+            });
+
+            // Initial load
+            loadMappings();
+        });
+    </script>
+</body>
+
+</html>

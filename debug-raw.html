@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raw Data Viewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #1a202c; color: #e2e8f0; }
+        .card, .input-group { background-color: #2d3748; }
+        .btn { transition: background-color 0.2s; }
+        .btn-primary { background-color: #4299e1; }
+        .btn-primary:hover { background-color: #3182ce; }
+        select, pre { background-color: #4a5568; }
+        .notification {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            padding: 1rem 2rem; border-radius: 0.5rem; color: white; z-index: 50;
+            opacity: 0; transition: opacity 0.5s ease-in-out;
+        }
+        .notification.show { opacity: 1; }
+        .notification.error { background-color: #c53030; }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col">
+    <header class="p-4 border-b border-gray-700">
+        <div class="max-w-full mx-auto flex justify-between items-center">
+            <h1 class="text-2xl md:text-4xl font-bold">Raw Data Viewer</h1>
+            <div class="flex items-center space-x-4">
+                <a href="/editor" class="text-blue-400 hover:text-blue-300">&larr; Config Editor</a>
+                <a href="/" class="text-blue-400 hover:text-blue-300">&larr; Back to Media Manager</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow p-4 overflow-y-auto">
+        <div class="max-w-6xl mx-auto">
+            <div class="card p-6 rounded-lg shadow-lg mb-4">
+                <h2 class="text-xl font-semibold mb-2">How it works</h2>
+                <p class="text-gray-400">
+                    Select a source and a library to see the raw, unprocessed JSON data for the 5 most recently added items. This is useful for debugging and for finding available fields for the Mappings Editor.
+                </p>
+            </div>
+
+            <div class="card p-6 rounded-lg shadow-lg mb-8">
+                <div class="flex flex-col md:flex-row md:items-end space-y-4 md:space-y-0 md:space-x-4">
+                    <div class="flex-1">
+                        <label for="source-selector" class="block font-semibold mb-2">Source:</label>
+                        <select id="source-selector" class="w-full p-2 rounded"></select>
+                    </div>
+                    <div class="flex-1">
+                        <label for="library-selector" class="block font-semibold mb-2">Library:</label>
+                        <select id="library-selector" class="w-full p-2 rounded" disabled></select>
+                    </div>
+                    <button id="fetch-button" class="btn btn-primary font-bold py-2 px-4 rounded" disabled>Fetch Raw Data</button>
+                </div>
+            </div>
+
+            <div id="loading" class="text-center my-8 hidden">
+                <p class="text-xl">Fetching...</p>
+            </div>
+
+            <pre id="results" class="p-4 rounded-lg text-sm overflow-x-auto hidden"><code></code></pre>
+        </div>
+    </main>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const sourceSelector = document.getElementById('source-selector');
+            const librarySelector = document.getElementById('library-selector');
+            const fetchButton = document.getElementById('fetch-button');
+            const loadingDiv = document.getElementById('loading');
+            const resultsPre = document.getElementById('results');
+            const resultsCode = resultsPre.querySelector('code');
+            const notification = document.getElementById('notification');
+
+            const showNotification = (message) => {
+                notification.textContent = message;
+                notification.className = 'notification error show';
+                setTimeout(() => { notification.classList.remove('show'); }, 4000);
+            };
+
+            const initializeSources = async () => {
+                const response = await fetch('/api/sources');
+                const sources = await response.json();
+                sourceSelector.innerHTML = '<option value="">-- Select a Source --</option>' + sources.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            };
+
+            sourceSelector.addEventListener('change', async () => {
+                const source = sourceSelector.value;
+                librarySelector.innerHTML = '';
+                librarySelector.disabled = true;
+                fetchButton.disabled = true;
+                resultsPre.classList.add('hidden');
+
+                if (!source) return;
+
+                try {
+                    const response = await fetch(`/api/${source}/libraries`);
+                    if (!response.ok) throw new Error('Failed to load libraries.');
+                    const libraries = await response.json();
+                    librarySelector.innerHTML = '<option value="">-- Select a Library --</option>' + libraries.map(lib => `<option value="${lib.section_id}">${lib.section_name}</option>`).join('');
+                    librarySelector.disabled = false;
+                } catch (e) {
+                    showNotification(e.message);
+                }
+            });
+
+            librarySelector.addEventListener('change', () => {
+                fetchButton.disabled = !librarySelector.value;
+            });
+
+            fetchButton.addEventListener('click', async () => {
+                const source = sourceSelector.value;
+                const libraryId = librarySelector.value;
+
+                if (!source || !libraryId) return;
+
+                loadingDiv.classList.remove('hidden');
+                resultsPre.classList.add('hidden');
+                fetchButton.disabled = true;
+
+                try {
+                    const response = await fetch(`/api/debug/raw-data?source=${source}&library_id=${libraryId}`);
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'An unknown error occurred.');
+                    
+                    resultsCode.textContent = JSON.stringify(data, null, 2);
+                    resultsPre.classList.remove('hidden');
+                } catch (e) {
+                    showNotification(e.message);
+                } finally {
+                    loadingDiv.classList.add('hidden');
+                    fetchButton.disabled = false;
+                }
+            });
+
+            initializeSources();
+        });
+    </script>
+</body>
+
+</html>
