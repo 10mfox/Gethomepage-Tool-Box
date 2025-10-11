@@ -16,6 +16,7 @@
 - [x] Ensured all sources stay up-to-date with background polling.
 
 ## Planned
+- [ ] Added Homepage Recently Added Service Yaml Generator 
 - [ ] Final Documentation Review
 - [ ] Final Performance Optimization & Testing
 
