@@ -2,7 +2,7 @@
 
 A powerful, fast, and efficient web-based tool to manage your self-hosted services. It provides a "Recently Added" viewer for your media servers (Plex via Tautulli, Jellyfin/Emby via Jellystat) and includes a live front-end editor for your `gethomepage` configuration files.
 
-:arrow_right: **[Click here to see my project ideas and roadmap](./ideas.md)**
+:arrow_right: **[Click here to see my project roadmap](./Roadmap.md)**
 
 ## Features
 
