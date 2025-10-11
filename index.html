@@ -19,13 +19,20 @@
 </head>
 <body class="p-4 md:p-8">
     <div class="max-w-6xl mx-auto">
-        <div class="flex justify-center items-baseline gap-x-3 mb-6">
-            <h1 class="text-3xl md:text-4xl font-bold text-center">Recently Added Manager</h1>
-            <div id="app-version" class="text-sm text-gray-400"></div>
+        <div class="relative flex justify-center items-start mb-6">
+            <div class="text-center">
+                <h1 class="text-3xl md:text-4xl font-bold">Recently Added Manager</h1>
+                <div id="app-version" class="text-sm text-gray-400 mt-1"></div>
+            </div>
+            <div class="absolute right-0 top-0 h-full flex items-center">
+                <a href="https://ko-fi.com/10mfox" target="_blank" rel="noopener noreferrer" class="text-sm text-pink-400 hover:text-pink-300">❤️ Support Me</a>
+            </div>
         </div>
-        <div class="flex justify-center gap-x-4 mb-6">
+        <div class="flex justify-center flex-wrap gap-x-4 gap-y-2 mb-6">
             <a href="/editor" class="text-blue-400 hover:text-blue-300">Config Editor</a>
             <a href="/editor/css-gui" class="text-blue-400 hover:text-blue-300">CSS GUI Editor</a>
+            <a href="/editor/mappings" class="text-blue-400 hover:text-blue-300">Mappings Editor</a>
+            <a href="/editor/debug-raw" class="text-blue-400 hover:text-blue-300">Raw Data Viewer</a>
         </div>
         
         <!-- Configuration -->
@@ -77,7 +84,7 @@
             const sourceSelectorContainer = document.getElementById('source-selector-container');
             const mainTitle = document.getElementById('main-title');
             let currentSource = '';
-            let cachedData = {}; // Store fetched data to avoid re-fetching
+            let cachedAddedItems = {}; // Store fetched item data to avoid re-fetching
 
             const fetchVersion = async () => {
                 try {
@@ -113,69 +120,64 @@
             };
 
             const populateLibraries = async () => {
+                librarySelector.innerHTML = '<p>-- Loading Libraries --</p>';
                 try {
-                    const response = await fetch(`/api/${currentSource}/libraries`);
+                    // Use the new /api/counts endpoint to populate the library selector
+                    const response = await fetch(`/api/counts?source=${currentSource}`);
                     if (!response.ok) {
                         const errorData = await response.json();
-                        // Use the specific error from the backend, or a generic one
                         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
                     }
-                    const libraries = await response.json();
+                    const libraryData = await response.json();
                     librarySelector.innerHTML = ''; // Clear loading message
-                    libraries.forEach(lib => {
+
+                    const sortedLibraryNames = Object.keys(libraryData).sort();
+
+                    for (const libraryName of sortedLibraryNames) {
+                        const lib = libraryData[libraryName];
                         const wrapper = document.createElement('div');
                         wrapper.className = 'flex items-center';
-                        
+
                         let countsHtml = '';
                         if (lib.counts && Object.keys(lib.counts).length > 0) {
                             const countEntries = Object.entries(lib.counts).map(([key, value]) => `${key}: ${value}`).join(' &middot; ');
                             countsHtml = `<span class="text-gray-400 text-sm ml-2">(${countEntries})</span>`;
                         }
 
+                        // Use libraryName for the value and label
                         wrapper.innerHTML = `
-                            <input type="checkbox" id="lib-${lib.section_id}" name="library-selection" value="${lib.section_id}" class="mr-2" checked>
-                            <label for="lib-${lib.section_id}">${lib.section_name}</label>${countsHtml}
+                            <input type="checkbox" id="lib-${libraryName.replace(/\s/g, '-')}" name="library-selection" value="${libraryName}" class="mr-2" checked>
+                            <label for="lib-${libraryName.replace(/\s/g, '-')}"">${libraryName}</label>${countsHtml}
                         `;
                         librarySelector.appendChild(wrapper);
-                    });
+                    }
                     // After populating and checking all libraries, trigger the initial data load.
-                    fetchData();
+                    fetchAddedItems();
                 } catch (error) {
                     librarySelector.innerHTML = `<p class="text-red-400">-- Error: ${error.message} --</p>`;
                     console.error("Failed to load libraries", error);
                 }
             };
 
-            const fetchData = async () => {
+            const fetchAddedItems = async () => {
                 loadingDiv.classList.remove('hidden');
                 resultsDiv.innerHTML = '';
 
-                const dateFormat = document.querySelector('input[name="date-format"]:checked').value;
-                // Construct a unique key for the cache based on source and date format
-                const cacheKey = `${currentSource}-${dateFormat}`;
-
-                // If we already have the data for this source and format, just render it.
-                if (cachedData[cacheKey]) {
-                    renderItems(cachedData[cacheKey]);
+                if (cachedAddedItems[currentSource]) {
+                    renderItems(cachedAddedItems[currentSource]);
                     loadingDiv.classList.add('hidden');
                     return;
                 }
 
-                // Build the URL for the new unified data endpoint
-                let url = `/api/data?source=${currentSource}`;
-                // The backend can format dates for us, which is more efficient.
-                if (dateFormat !== 'datetime') {
-                    url += `&dateFormat=${dateFormat}`;
-                }
-
                 try {
-                    const response = await fetch(url);
+                    // Always fetch raw data with timestamps.
+                    const response = await fetch(`/api/added?source=${currentSource}`);
                     if (!response.ok) {
                         const errorData = await response.json();
                         throw new Error(errorData.error || `HTTP ${response.status}`);
                     }
                     const data = await response.json();
-                    cachedData[cacheKey] = data; // Cache the response
+                    cachedAddedItems[currentSource] = data; // Cache the response
                     renderItems(data);
                 } catch (error) {
                     resultsDiv.innerHTML = `<div class="card error-msg p-3 rounded-lg">Error fetching data: ${error.message}</div>`;
@@ -184,12 +186,12 @@
                 }
             };
 
-            const formatTimestamp = (timestamp) => {
+            const formatTimestamp = (secondsTimestamp) => {
                 const selectedFormat = document.querySelector('input[name="date-format"]:checked').value;
-                const date = new Date(timestamp * 1000);
+                const date = new Date(secondsTimestamp * 1000);
 
                 if (selectedFormat === 'relative') {
-                    const now = new Date();
+                    const now = new Date(); // The date is already created from seconds, so we compare directly
                     const seconds = Math.floor((now - date) / 1000);
                     let interval = seconds / 31536000;
                     if (interval > 1) return Math.floor(interval) + " years ago";
@@ -214,7 +216,7 @@
 
             const renderItems = (data) => {
                 const selectedCheckboxes = document.querySelectorAll('input[name="library-selection"]:checked');
-                const selectedLibraryNames = new Set(Array.from(selectedCheckboxes).map(cb => cb.nextElementSibling.textContent));
+                const selectedLibraryNames = new Set(Array.from(selectedCheckboxes).map(cb => cb.value));
 
                 if (!data || Object.keys(data).length === 0) {
                     resultsDiv.innerHTML = '<p>No recently added items found for this library.</p>';
@@ -237,16 +239,12 @@
                     allLibrariesHtml += `<h2 class="text-2xl font-semibold mb-4">${libraryName}</h2>`;
                     allLibrariesHtml += `<div class="space-y-3">`;
 
-                    // The date formatting is now done on the backend if requested,
-                    // but we keep the JS formatter as a fallback for the 'datetime' option.
-                    const dateFormat = document.querySelector('input[name="date-format"]:checked').value;
-
                     if (libraryItems && libraryItems.length > 0) {
                         // Sort items by added_at descending (newest first)
                         libraryItems.sort((a, b) => b.added_at - a.added_at).forEach(item => {
                             // The 'Remove' button and its logic have been removed.
-                            allLibrariesHtml += `<div class="card p-3 rounded-lg" id="tautulli-item-${item.id || Math.random()}">
-                                <div><p class="font-bold">${item.title} (${item.year})</p><p class="text-sm text-gray-400">Added: ${typeof item.added_at === 'string' ? item.added_at : formatTimestamp(item.added_at)}</p></div>
+                            allLibrariesHtml += `<div class="card p-3 rounded-lg">
+                                <div><p class="font-bold">${item.title}</p><p class="text-sm text-gray-400">Added: ${formatTimestamp(item.added_at)}</p></div>
                             </div>`;
                         });
                     } else {
@@ -269,14 +267,16 @@
                     mainTitle.textContent = `${selectedOption.text} - Recently Added`;
                     resultsDiv.innerHTML = '';
                     librarySelector.innerHTML = '<p>-- Loading Libraries --</p>';
-                    cachedData = {}; // Clear cache when switching source
+                    cachedAddedItems = {}; // Clear cache when switching source
                     populateLibraries();
                 } else if (event.target.name === 'date-format') {
-                    // If date format changes, we need to re-fetch and re-render
-                    fetchData();
+                    // If date format changes, just re-render with the cached data.
+                    const data = cachedAddedItems[currentSource];
+                    if (data) renderItems(data);
                 } else if (event.target.name === 'library-selection') {
-                    // If only library selection changes, we can just re-render the cached data
-                    fetchData();
+                    // If library selection changes, re-render with the cached data.
+                    const data = cachedAddedItems[currentSource];
+                    if (data) renderItems(data);
                 }
             };
 

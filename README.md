@@ -1,19 +1,20 @@
 # Media Manager & Homepage Tool-Box
 
-A powerful, fast, and efficient web-based tool to manage your self-hosted services. It provides a "Recently Added" viewer for your media servers (Plex via Tautulli, Jellyfin/Emby via Jellystat) and includes a live front-end editor for your `gethomepage` configuration files.
+A powerful, fast, and efficient web-based tool to manage your self-hosted services. It provides a "Recently Added" viewer for your media servers (Plex via Tautulli, Jellyfin/Emby via Jellystat, Audiobookshelf) and includes a suite of live editors for your `gethomepage` configuration files.
 
 :arrow_right: **[Click here to see my project roadmap](./Roadmap.md)**
 
 ## Features
 
-- **Multi-Source Support**: Connects to both Tautulli (for Plex) and Jellystat (for Jellyfin/Emby) and allows you to switch between them seamlessly.
-- **Live Configuration Editor**: A full-featured editor at `/editor` that allows you to view and modify all of your `gethomepage` YAML, CSS, and JS configuration files directly from the browser.
-- **Live CSS GUI Editor**: A visual editor at `/editor/css-gui` with color pickers and sliders to customize your `gethomepage` theme and see the results instantly in a live preview pane.
+- **Multi-Source Support**: Connects to Tautulli (for Plex), Jellystat (for Jellyfin/Emby), and Audiobookshelf, allowing you to switch between them seamlessly.
+- **Configuration Editor Suite**:
+    - **File Editor** (`/editor`): A full-featured editor to modify all your `gethomepage` YAML, CSS, and JS configuration files.
+    - **CSS GUI Editor** (`/editor/css-gui`): A visual editor with color pickers and sliders to customize your `gethomepage` theme and see the results instantly in a live preview pane.
+    - **Mappings Editor** (`/editor/mappings`): Customize how media titles are displayed using templates and available data fields from your media servers.
+    - **Raw Data Viewer** (`/editor/debug-raw`): A tool to inspect the raw data from your media servers, perfect for discovering fields to use in your title mappings.
 - **Smart Library Selection**: Dynamically fetches and lists your libraries from the selected source, with all libraries selected by default for immediate viewing.
 - **Grouped Display**: Displays recently added items grouped by library for clarity.
-- **Detailed Information**: Shows the item's title (formatted for movies, TV shows, and music), year, and when it was added.
 - **Flexible Date Formatting**: Choose how to display the "added at" timestamp:
-    - **Date & Time**: Full timestamp (e.g., `10/1/2023, 5:00:00 PM`)
     - **Relative**: Human-readable time ago (e.g., `2 days ago`)
     - **Short**: Abbreviated date (e.g., `Oct 01`)
 - **High Performance**: Utilizes a background caching mechanism for all data sources. The application pre-loads all data on startup and then intelligently polls for changes, ensuring the UI loads instantly without making the user wait for API calls.
@@ -23,7 +24,7 @@ A powerful, fast, and efficient web-based tool to manage your self-hosted servic
 
 The tool is composed of a Python Flask backend and a vanilla JavaScript frontend.
 
-- The **backend** communicates with the Tautulli and Jellystat APIs to:
+- The **backend** communicates with the Tautulli, Jellystat, and Audiobookshelf APIs to:
     1.  **Prime a cache on startup** by fetching all "recently added" data from all configured sources.
     2.  Run a **background thread** for each source that polls periodically to check for library changes (e.g., new media added).
     3.  If a change is detected, it **automatically refreshes the cache** with the latest data.
@@ -36,7 +37,7 @@ This application is designed to be run as a Docker container.
 ### Prerequisites
 
 - Docker and Docker Compose.
-- A running instance of Tautulli (for Plex) and/or Jellystat (for Jellyfin/Emby).
+- A running instance of Tautulli (for Plex), Jellystat (for Jellyfin/Emby), and/or Audiobookshelf.
 - A folder containing your `gethomepage` configuration files (e.g., `services.yaml`, `custom.css`).
 
 ### 1. Create `docker-compose.yml`
@@ -47,26 +48,27 @@ Create a file named `docker-compose.yml` in the same directory. This file will d
 services:
   redis:
     image: "redis:alpine"
-    container_name: gethomepage-tool-box-redis
+    container_name: media-manager-redis
     restart: unless-stopped
 
   media-manager:
     image: ghcr.io/10mfox/gethomepage-tool-box:latest
-    container_name: gethomepage-tool-box
+    container_name: media-manager
     depends_on:
       - redis
     ports:
-      - "5054:5000"
+      - "5000:5000" # Map host port 5000 to container port 5000
     environment:
-      # --- Tautulli / Jellystat Configuration ---
       - TAUTULLI_URL=http://0.0.0.0:1234
-      - TAUTULLI_API_KEY=your_tautulli_key
+      - TAUTULLI_API_KEY=your_tautulli_api_key
+      # --- Optional: Add your Jellystat details here ---
       - JELLYSTAT_URL=http://0.0.0.0:1234
-      - JELLYSTAT_API_KEY=your_jellystat_key
-      
+      - JELLYSTAT_API_KEY=your_jellystat_api_key
+      # --- Optional: Add your Audiobookshelf details here ---
+      - AUDIOBOOKSHELF_URL=http://0.0.0.0:1234
+      - AUDIOBOOKSHELF_API_KEY=your_audiobookshelf_api_key
       # --- Homepage Editor Preview URL ---
-      - HOMEPAGE_PREVIEW_URL=https://your.homepage.url
-      
+      - HOMEPAGE_PREVIEW_URL=https://your-homepage-instance.com
       # --- Redis Configuration ---
       - REDIS_HOST=redis
     restart: unless-stopped
@@ -75,7 +77,7 @@ services:
       - /path/to/your/homepage/config:/app/config
 ```
 
-**Important:** Replace the `TAUTULLI_URL` or `JELLYSTAT_URL` and `TAUTULLI_API_KEY` or `JELLYSTAT_API_KEY` with your actual Tautulli URL or Jellystat URL, and API key if they differ from the example.
+**Important:** Replace the `TAUTULLI_URL` or `JELLYSTAT_URL` or `AUDIOBOOKSHELF_URL` and `TAUTULLI_API_KEY` or `JELLYSTAT_API_KEY` or `AUDIOBOOKSHELF_API_KEY` with your actual Tautulli URL or Jellystat URL or Audiobookshelf URL, and API key if they differ from the example.
 
 ### 3. Run the Application
 
@@ -85,79 +87,4 @@ Open a terminal in the project directory and run the following command:
 docker-compose up -d
 ```
 
-The application will now be running and accessible at `http://localhost:5054` (or whichever host port you configured).
-
-## API Endpoints
-
-The backend provides several API endpoints. For a full, interactive experience with live testing, visit `/apidocs` on your running instance (e.g., `http://localhost:5053/apidocs`).
-
-### `GET /api/sources`
-
-Returns a list of the data sources (Tautulli, Jellystat) that are configured on the server.
-
-*   **Response (200 OK):**
-    ```json
-    [
-      {
-        "id": "tautulli",
-        "name": "Tautulli"
-      },
-      {
-        "id": "jellystat",
-        "name": "Jellystat"
-      }
-    ]
-    ```
-
-### `GET /api/tautulli/libraries` and `GET /api/jellystat/libraries`
-
-Fetches the list of all available libraries, including media counts, for the specified source.
-
-*   **Response (200 OK):** A JSON array of library objects.
-    ```json
-    [
-      {
-        "section_id": "1",
-        "section_name": "Movies",
-        "counts": { "Movies": 1234 }
-      }
-    ]
-    ```
-
-### `GET /api/data` (Cached)
-
-Fetches all recently added items for a given source from the in-memory cache. This is the primary endpoint for the frontend and is extremely fast.
-
-*   **Query Parameters:**
-    *   `source` (required): The data source to query. Example: `?source=tautulli`
-    *   `dateFormat` (optional): The format for dates. Options: `short`, `relative`. Example: `?source=tautulli&dateFormat=relative`
-
-*   **Response (200 OK):** A JSON object containing the data grouped by library name.
-
-    ```json
-    {
-      "Movies": {
-        "items": [
-          {
-            "added_at": 1672531200,
-            "title": "The Matrix",
-            "year": "1999",
-            "id": "hist_12345"
-          }
-        ],
-        "counts": {
-          "Movies": 1234
-        }
-      },
-      "TV Shows": {
-        "items": [
-          {
-            "added_at": 1672617600,
-            "title": "The Simpsons - S04E12 - Marge vs. the Monorail",
-            "year": "1993"
-          }
-        ],
-        "counts": { "Shows": 150, "Seasons": 10, "Episodes": 300 }
-      }
-    }
-    ```
+The application will now be running and accessible at `http://localhost:5000` (or whichever host port you configured).
