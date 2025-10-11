@@ -16,7 +16,6 @@
 - [ ] Currently working on all sources not staying up to date. 
 
 ## Planned
-- [ ] Add Self-Hosted Static Asset CDN
 - [ ] Testing
 - [ ] Documentation
 - [ ] Final Deployment
