@@ -88,7 +88,3 @@ docker-compose up -d
 ```
 
 The application will now be running and accessible at `http://localhost:5054` (or whichever host port you configured).
-
-## API Endpoints
-
-The backend provides several API endpoints. For a full, interactive experience with live testing, visit `/apidocs` on your running instance (e.g., `http://localhost:5054/apidocs`).
