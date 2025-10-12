@@ -57,7 +57,7 @@ services:
     depends_on:
       - redis
     ports:
-      - "5054:5000" # Map host port 5054 to container port 5000
+      - "5000:5000" # Map host port 5000 to container port 5000
     environment:
       - TAUTULLI_URL=http://0.0.0.0:1234
       - TAUTULLI_API_KEY=your_tautulli_api_key
@@ -87,4 +87,4 @@ Open a terminal in the project directory and run the following command:
 docker-compose up -d
 ```
 
-The application will now be running and accessible at `http://localhost:5054` (or whichever host port you configured).
+The application will now be running and accessible at `http://localhost:5000` (or whichever host port you configured).
