@@ -16,7 +16,8 @@
 - [x] Ensured all sources stay up-to-date with background polling.
 
 ## Planned
-- [ ] Added Gethomepage Recently Added Service Yaml Generator 
+- [ ] Add User Activity / Last Watched 
+- [ ] Add Gethomepage Recently Added Service Yaml Generator 
 - [ ] Final Documentation Review
 - [ ] Final Performance Optimization & Testing
 
