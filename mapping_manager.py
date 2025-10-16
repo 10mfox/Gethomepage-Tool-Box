@@ -33,6 +33,41 @@ def get_default_mappings():
             'album': {
                 'template': '{parent_title} - {title}',
                 'fields': ['title', 'year', 'originally_available_at', 'media_type', 'parent_title']
+            },
+            'activity_episode': {
+                'templates': {
+                    'title': '{grandparent_title} - S{parent_media_index}E{media_index} {view_offset_hhmmss} / {duration_hhmmss}',
+                    'user': '{user} ({status}) {status_dot}'
+                },
+                'fields': ['user', 'friendly_name', 'title', 'grandparent_title', 'parent_title', 'state', 'platform', 'device', 'player', 'progress_percent', 'status', 'view_offset_hhmmss', 'duration_hhmmss', 'status_dot']
+            },
+            'activity_movie': {
+                'templates': {
+                    'title': '{title} {view_offset_hhmmss} / {duration_hhmmss}',
+                    'user': '{user} ({status}) {status_dot}'
+                },
+                'fields': ['user', 'friendly_name', 'title', 'year', 'state', 'platform', 'device', 'player', 'progress_percent', 'status', 'view_offset_hhmmss', 'duration_hhmmss', 'status_dot']
+            },
+            'last_played_activity_episode': {
+                'templates': {
+                    'title': '{grandparent_title} - S{parent_media_index}E{media_index} - {title}',
+                    'user': '{user} ({status}) {status_dot}'
+                },
+                'fields': ['user', 'friendly_name', 'title', 'grandparent_title', 'parent_title', 'stopped', 'stopped_formatted', 'platform', 'device', 'player', 'status', 'status_dot']
+            },
+            'last_played_activity_movie': {
+                'templates': {
+                    'title': '{title} ({year})',
+                    'user': '{user} ({status}) {status_dot}'
+                },
+                'fields': ['user', 'friendly_name', 'title', 'year', 'stopped', 'stopped_formatted', 'platform', 'device', 'player', 'status', 'status_dot']
+            },
+            'last_played_activity_track': {
+                'templates': {
+                    'title': '{grandparent_title} - {title}',
+                    'user': '{user} ({status}) {status_dot}'
+                },
+                'fields': ['user', 'friendly_name', 'title', 'grandparent_title', 'parent_title', 'stopped', 'stopped_formatted', 'platform', 'device', 'player', 'status', 'status_dot']
             }
         },
         'jellystat': {
@@ -47,6 +82,44 @@ def get_default_mappings():
             'Audio': {
                 'template': '{Name}',
                 'fields': ['Name']
+            },
+            'activity_Episode': {
+                'templates': {
+                    'title': '{SeriesName} - S{ParentIndexNumber}E{IndexNumber} {PositionTicks_hhmmss}/{RunTimeTicks_hhmmss}',
+                    'user': '{UserName} ({status}) {status_dot}'
+                },
+                'fields': [
+                    'UserName', 'Client', 'DeviceName', 'Name', 'SeriesName', 'IsPaused', 'PlayMethod', 'status', 'CompletionPercentage',
+                    'IndexNumber', 'ParentIndexNumber', 'PositionTicks_hhmmss', 'RunTimeTicks_hhmmss', 'LastWatched', 'CommunityRating',
+                    'OfficialRating', 'ProductionYear', 'Container', 'VideoCodec', 'AudioCodec', 'LastClient', 'status_dot'
+                ]
+            },
+            'activity_Movie': {
+                'templates': {
+                    'title': '{Name} ({CompletionPercentage}%) {PositionTicks_hhmmss}/{RunTimeTicks_hhmmss}',
+                    'user': '{UserName} ({status}) {status_dot}'
+                },
+                'fields': [
+                    'UserName', 'Client', 'DeviceName', 'Name', 'IsPaused', 'PlayMethod', 'status',
+                    'PositionTicks_hhmmss', 'RunTimeTicks_hhmmss', 'CommunityRating', 'OfficialRating',
+                    'ProductionYear', 'Container', 'VideoCodec', 'AudioCodec', 'CompletionPercentage', 'LastClient', 'status_dot'
+                ]
+            },
+            'last_played_activity_Episode': {
+                'templates': {
+                    'title': '{LastWatched}',
+                    'user': '{UserName} ({status}) {status_dot}'
+                },
+                'fields': ['UserName', 'LastWatched', 'LastActivityDate', 'LastActivityDate_formatted', 'LastClient', 'TotalPlays', 'TotalWatchTime', 'status', 'status_dot', 'LastActivityDate_formatted']
+            },
+            'last_played_activity_Movie': {
+                'templates': {
+                    'title': '{LastWatched}',
+                    'user': '{UserName} ({status}) {status_dot}'
+                },
+                'fields': [
+                    'UserName', 'LastWatched', 'LastActivityDate', 'LastActivityDate_formatted', 'LastClient', 'TotalPlays', 'TotalWatchTime', 'status', 'status_dot', 'LastActivityDate_formatted'
+                ]
             }
         },
         'audiobookshelf': {
@@ -106,7 +179,7 @@ def save_mappings(data):
         return True, "Mappings saved successfully."
     except Exception as e:
         log.error(f"Error saving mappings.yaml: {e}")
-        return False, f"Could not save mappings: {e}", None
+        return False, f"Could not save mappings: {e}"
 
 def apply_mapping(item_data, source, media_type):
     """
@@ -122,17 +195,70 @@ def apply_mapping(item_data, source, media_type):
     source_mapping = mappings.get(source, {})
     type_mapping = source_mapping.get(media_type)
 
-    # If no specific mapping exists, try to find a default 'title' or 'name' field.
     if not type_mapping:
+        # If no specific mapping exists, try to find a default 'title' or 'name' field.
         return item_data.get('title', item_data.get('name', 'Unknown Title'))
 
     template = type_mapping.get('template', '{title}')
 
-    # Use a dictionary that returns an empty string for missing keys,
-    # ensuring that any field in the template can be resolved.
     class SafeDict(dict):
         def __missing__(self, key):
             return ''
 
-    formatted_title = template.format_map(SafeDict(item_data))
-    return formatted_title
+    return template.format_map(SafeDict(item_data))
+
+def apply_activity_mapping(item_data, source='jellystat', sub_type='activity'):
+    """
+    Applies the mapping specifically for the 'activity' type, which has multiple templates.
+    Returns a dictionary of formatted strings.
+    """
+    # Determine the specific sub-type based on the media type
+    media_type = item_data.get('media_type') or item_data.get('Type')
+    
+    # For Jellystat history, the 'Type' field is missing. We can infer the type.
+    # If 'SeriesName' exists, it's an episode. Otherwise, it's likely a movie.
+    if source == 'jellystat' and not media_type:
+        media_type = 'Episode' if item_data.get('SeriesName') else 'Movie'
+    media_type = media_type or '' # Ensure media_type is a string
+    
+    if 'movie' in media_type.lower():
+        sub_type = f"{sub_type}_movie" if source == 'tautulli' else f"{sub_type}_Movie"
+    elif 'episode' in media_type.lower():
+        sub_type = f"{sub_type}_episode" if source == 'tautulli' else f"{sub_type}_Episode"
+    elif 'track' in media_type.lower() and source == 'tautulli':
+        sub_type = f"{sub_type}_track"
+    # If it's neither, it will just use the base 'activity' or 'last_played_activity' which might not exist, leading to fallback.
+
+    mappings = get_mappings()
+    type_mapping = mappings.get(source, {}).get(sub_type)
+
+    if not type_mapping or 'templates' not in type_mapping:
+        # Fallback for when mappings are not found. Check for both Jellystat and Tautulli style fields.
+        # For last played, Jellystat has a nice 'LastWatched' field.
+        title = item_data.get('LastWatched', item_data.get('Name', item_data.get('title', '')))
+        user = item_data.get('UserName', item_data.get('user', ''))
+        return {'title': title, 'user': user}
+
+    class SafeDict(dict):
+        """A dict that can handle nested key access like 'media[metadata][title]'."""
+        def __missing__(self, key):
+            # Handle nested keys like 'user[username]'
+            if '[' in key and key.endswith(']'):
+                parts = key.replace(']', '').split('[')
+                val = self
+                for part in parts:
+                    if isinstance(val, dict):
+                        val = val.get(part)
+                        if val is None: return ''
+                    else:
+                        return ''
+                return val if not isinstance(val, dict) else ''
+            return ''
+
+    output = {}
+    templates = type_mapping.get('templates', {})
+    for key, template in templates.items():
+        # Format the string and then clean up any leading/trailing hyphens or whitespace
+        # that might result from empty fields (e.g., "{grandparent_title} - {title}" for a movie).
+        output[key] = template.format_map(SafeDict(item_data)).strip(' -')
+    return output

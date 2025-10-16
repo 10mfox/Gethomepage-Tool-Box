@@ -44,16 +44,21 @@
         </div>
     </header>
 
-    <main class="flex-grow p-4 overflow-y-auto">
-        <div class="max-w-6xl mx-auto">
-            <div class="card p-6 rounded-lg shadow-lg mb-4">
-                <h2 class="text-xl font-semibold mb-2">How it works</h2>
-                <p class="text-gray-400">
-                    Use this editor to customize how item titles are displayed in the "Recently Added" list. For each source and media type, you can define a template string. Click on the available fields to insert them into your template.
-                </p>
+    <main class="flex-grow flex flex-col md:flex-row overflow-hidden p-4 gap-4">
+        <!-- Left Navigation Panel -->
+        <div class="w-full md:w-1/4 flex-shrink-0">
+            <div id="navigation-panel" class="card p-4 rounded-lg shadow-lg h-full overflow-y-auto">
+                <!-- Navigation links will be injected here -->
             </div>
-            <div id="mappings-container" class="space-y-8">
-                <!-- Mappings will be injected here by JavaScript -->
+        </div>
+
+        <!-- Right Editor Panel -->
+        <div class="w-full md:w-3/4 flex flex-col">
+            <div id="editor-panel" class="card p-6 rounded-lg shadow-lg flex-grow overflow-y-auto">
+                <!-- Editor for the selected mapping will be injected here -->
+                <div class="text-center text-gray-400">
+                    <p class="text-xl">Select a mapping from the left to begin editing.</p>
+                </div>
             </div>
             <div class="mt-8 flex justify-end space-x-4">
                 <button id="reset-button" class="btn btn-secondary font-bold py-2 px-4 rounded">Reset to Defaults</button>
@@ -66,11 +71,13 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const mappingsContainer = document.getElementById('mappings-container');
+            const navigationPanel = document.getElementById('navigation-panel');
+            const editorPanel = document.getElementById('editor-panel');
             const saveButton = document.getElementById('save-button');
             const resetButton = document.getElementById('reset-button');
             const notification = document.getElementById('notification');
             let currentMappings = {}; // Store the loaded mappings in memory
+            let lastFocusedInput = null; // Track the last focused input field
 
             const showNotification = (message, isError = false) => {
                 notification.textContent = message;
@@ -78,95 +85,237 @@
                 setTimeout(() => { notification.classList.remove('show'); }, 3000);
             };
 
-            const buildEditor = (mappings) => {
-                let html = '';
+            const buildNavigation = (mappings) => {
+                let navHtml = '<div class="space-y-4">';
                 for (const [source, types] of Object.entries(mappings)) {
-                    html += `<div class="card p-6 rounded-lg shadow-lg">
-                                <h2 class="text-2xl font-bold capitalize mb-4">${source}</h2>
-                                <div class="space-y-6">`;
+                    navHtml += `<div>
+                                    <h2 class="text-xl font-bold capitalize mb-2 text-gray-300">${source}</h2>
+                                    <ul class="space-y-1">`;
                     for (const [type, config] of Object.entries(types)) {
-                        const fieldsHtml = config.fields.map(field => 
-                            `<span class="field-tag inline-block rounded-full px-3 py-1 text-sm font-semibold mr-2 mb-2" data-field="${field}">{${field}}</span>`
-                        ).join('');
-
-                        html += `<div class="mapping-item" data-source="${source}" data-type="${type}">
-                                    <h3 class="text-lg font-semibold capitalize mb-2">${type}</h3>
-                                    <label class="block text-sm font-medium text-gray-300 mb-1">Template:</label>
-                                    <input type="text" class="template-input w-full p-2 rounded font-mono" value="${config.template}">
-                                    <div class="mt-2">
-                                        <p class="text-sm text-gray-400 mb-1">Available fields (click to insert):</p>
-                                        <div class="flex flex-wrap">${fieldsHtml}</div>
-                                    </div>
-                                 </div>`;
+                        // Format the type for display: replace underscores, split camelCase, and capitalize each word.
+                        const typeName = type
+                            .replace(/_/g, ' ') // Replace underscores with spaces
+                            .replace(/([a-z])([A-Z])/g, '$1 $2') // Split camelCase
+                            .split(' ')
+                            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                            .join(' ');
+                        navHtml += `<li>
+                                        <a href="#" class="nav-link block p-2 rounded hover:bg-gray-600" data-source="${source}" data-type="${type}">${typeName}</a>
+                                    </li>`;
                     }
-                    html += `</div></div>`;
+                    navHtml += `</ul></div>`;
                 }
-                mappingsContainer.innerHTML = html;
+                navHtml += '</div>';
+                navigationPanel.innerHTML = navHtml;
+            };
+
+            const buildEditorPanel = (source, type, config) => {
+                // First, save any pending changes from the currently displayed editor
+                updateMappingsFromUI();
+
+                const fieldsHtml = config.fields.map(field =>
+                    `<span class="field-tag inline-block rounded-full px-3 py-1 text-sm font-semibold mr-2 mb-2" data-field="${field}">{${field}}</span>`
+                ).join('');
+
+                let editorHtml = `<div class="mapping-item" data-source="${source}" data-type="${type}">
+                                    <h3 class="text-xl font-semibold capitalize mb-4">${type.replace(/([A-Z])/g, ' $1').trim()}</h3>`;
+
+                if (config.templates && typeof config.templates === 'object') {
+                    for (const [templateKey, templateValue] of Object.entries(config.templates)) {
+                        editorHtml += `<div class="mb-4">
+                                         <label class="block text-sm font-medium text-gray-300 mb-1 capitalize">${templateKey}:</label>
+                                         <input type="text" class="template-input w-full p-2 rounded font-mono" data-template-key="${templateKey}" value="${templateValue}">
+                                       </div>`;
+                    }
+                } else {
+                    editorHtml += `<div class="mb-4">
+                                     <label class="block text-sm font-medium text-gray-300 mb-1">Template:</label>
+                                     <input type="text" class="template-input w-full p-2 rounded font-mono" value="${config.template}">
+                                   </div>`;
+                }
+
+                editorHtml += `<div class="mt-4">
+                                 <p class="text-sm text-gray-400 mb-2">Available fields (click to insert):</p>
+                                 <div class="flex flex-wrap">${fieldsHtml}</div>
+                             </div>
+                           </div>`;
+
+                editorPanel.innerHTML = editorHtml;
             };
 
             const loadMappings = async (useDefaults = false) => {
-                const url = useDefaults ? '/editor/api/mappings/default' : '/editor/api/mappings';
                 try {
-                    const response = await fetch(url);
-                    const mappings = await response.json();
-                    currentMappings = mappings; // Store the loaded mappings
-                    buildEditor(mappings);
+                    const [savedMappingsRes, defaultMappingsRes] = await Promise.all([
+                        fetch('/editor/api/mappings'),
+                        fetch('/editor/api/mappings/default')
+                    ]);
+
+                    if (!savedMappingsRes.ok || !defaultMappingsRes.ok) {
+                        throw new Error('Failed to fetch mapping configurations.');
+                    }
+
+                    const savedMappings = await savedMappingsRes.json();
+                    const defaultMappings = await defaultMappingsRes.json();
+
+                    // Deep merge defaults into saved mappings to ensure new fields/types are always present.
+                    // This prevents the UI from breaking if a user's saved mappings.yaml is outdated.
+                    const mergedMappings = JSON.parse(JSON.stringify(defaultMappings)); // Start with a copy of defaults
+                    for (const source in savedMappings) {
+                        if (!mergedMappings[source]) {
+                            mergedMappings[source] = {};
+                        }
+                        for (const type in savedMappings[source]) {
+                            if (!mergedMappings[source][type]) {
+                                mergedMappings[source][type] = {};
+                            }
+                            // Merge the properties of the type (template, templates, fields)
+                            Object.assign(mergedMappings[source][type], savedMappings[source][type]);
+                            // If the saved mapping has a 'templates' object, ensure it's fully merged
+                            if (savedMappings[source][type].templates && mergedMappings[source][type].templates) {
+                                Object.assign(mergedMappings[source][type].templates, savedMappings[source][type].templates);
+                            }
+                        }
+                    }
+
+
+                    // If 'useDefaults' is true, we use the pure default mappings. Otherwise, use the merged result.
+                    const mappings = useDefaults ? defaultMappings : mergedMappings;
+                    currentMappings = mappings;
+                    buildNavigation(mappings);
+                    if (useDefaults) {
+                        editorPanel.innerHTML = `<div class="text-center text-gray-400"><p class="text-xl">Defaults loaded. Select a mapping to view and then click 'Save Mappings'.</p></div>`;
+                    }
                 } catch (e) {
                     showNotification('Failed to load mappings.', true);
                 }
             };
 
-            const collectMappingsFromUI = () => {
-                // Create a deep copy to avoid modifying the stored mappings directly
-                const updatedMappings = JSON.parse(JSON.stringify(currentMappings));
+            const updateMappingsFromUI = () => {
+                const activeItem = editorPanel.querySelector('.mapping-item');
+                if (!activeItem) return; // Nothing to save if no editor is displayed
 
-                document.querySelectorAll('.mapping-item').forEach(item => {
-                    const source = item.dataset.source;
-                    const type = item.dataset.type;
-                    const template = item.querySelector('.template-input').value;
-                    
-                    // Only update the template value, preserving the other properties like 'fields'
-                    if (updatedMappings[source] && updatedMappings[source][type]) {
-                        updatedMappings[source][type].template = template;
+                const source = activeItem.dataset.source;
+                const type = activeItem.dataset.type;
+
+                if (currentMappings[source] && currentMappings[source][type]) {
+                    const templateInputs = activeItem.querySelectorAll('.template-input');
+                    if (templateInputs.length > 1 || (templateInputs.length === 1 && templateInputs[0].dataset.templateKey)) {
+                        templateInputs.forEach(input => {
+                            const key = input.dataset.templateKey;
+                            currentMappings[source][type].templates[key] = input.value;
+                        });
+                    } else if (templateInputs.length === 1) {
+                        currentMappings[source][type].template = templateInputs[0].value;
                     }
+                }
+            };
+
+            const collectAllMappings = () => {
+                updateMappingsFromUI(); // Ensure the currently displayed editor's values are saved
+                const updatedMappings = JSON.parse(JSON.stringify(currentMappings)); // Return a clean copy
+
+                // This part is now simplified as we update the 'currentMappings' object directly.
+                // The original logic iterated the whole DOM, which is no longer necessary.
+                // We just need to ensure the final state of the in-memory object is correct.
+                Object.keys(updatedMappings).forEach(source => {
+                    Object.keys(updatedMappings[source]).forEach(type => {
+                        // Ensure 'fields' are not saved in the final output, as they are for UI only.
+                        // A better approach is to construct the payload from scratch, but for now this is fine.
+                        // Let's rebuild the object to be safe.
+                    });
                 });
-                return updatedMappings;
+
+                // Rebuild the object to be saved, excluding the 'fields' property.
+                const mappingsToSave = {};
+                for (const source in currentMappings) {
+                    mappingsToSave[source] = {};
+                    for (const type in currentMappings[source]) {
+                        const { fields, ...configToSave } = currentMappings[source][type];
+                        mappingsToSave[source][type] = configToSave;
+                    }
+                }
+                return mappingsToSave;
             };
 
             saveButton.addEventListener('click', async () => {
-                const mappings = collectMappingsFromUI();
+                const mappingsToSave = collectAllMappings();
                 try {
                     const response = await fetch('/editor/api/mappings', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(mappings)
+                        body: JSON.stringify(mappingsToSave)
                     });
                     const result = await response.json();
                     showNotification(result.message, !response.ok);
+                    if (response.ok) {
+                        // Reload mappings to reflect the saved state cleanly
+                        loadMappings();
+                    }
                 } catch (e) {
                     showNotification('Error saving mappings.', true);
                 }
             });
 
             resetButton.addEventListener('click', () => {
-                if (confirm('Are you sure you want to reset all mappings to their default values?')) {
+                if (confirm('Are you sure you want to reset all mappings to their default values? This will not save until you click "Save Mappings".')) {
                     loadMappings(true);
-                    showNotification('Mappings reset to default. Click "Save Mappings" to apply.');
                 }
             });
 
-            mappingsContainer.addEventListener('click', (e) => {
-                if (e.target.classList.contains('field-tag')) {
-                    const field = e.target.textContent;
-                    const input = e.target.closest('.mapping-item').querySelector('.template-input');
+            navigationPanel.addEventListener('click', (e) => {
+                if (e.target.classList.contains('nav-link')) {
+                    e.preventDefault();
+                    const source = e.target.dataset.source;
+                    const type = e.target.dataset.type;
                     
-                    // Insert the field at the current cursor position
+                    // Highlight active link
+                    navigationPanel.querySelectorAll('.nav-link').forEach(link => link.classList.remove('bg-blue-600', 'text-white'));
+                    e.target.classList.add('bg-blue-600', 'text-white');
+
+                    if (currentMappings[source] && currentMappings[source][type]) {
+                        buildEditorPanel(source, type, currentMappings[source][type]);
+                    }
+                }
+            });
+
+            editorPanel.addEventListener('click', (e) => {
+                if (e.target.classList.contains('field-tag')) {
+                    e.preventDefault(); // Prevent loss of focus from the input
+                    const field = e.target.textContent;
+                    const mappingItem = editorPanel.querySelector('.mapping-item');
+
+                    // Determine the correct input to target. Use the last focused input if it's
+                    // within the current mapping item, otherwise fall back to the first input.
+                    let input = null;
+                    if (lastFocusedInput && mappingItem.contains(lastFocusedInput)) {
+                        input = lastFocusedInput;
+                    } else {
+                        input = mappingItem.querySelector('.template-input');
+                    }
+
+                    if (!input) return;
+                    
+                    // Insert the field at the current cursor position in the determined input
                     const start = input.selectionStart;
                     const end = input.selectionEnd;
                     const text = input.value;
                     input.value = text.substring(0, start) + field + text.substring(end);
                     input.focus();
                     input.selectionStart = input.selectionEnd = start + field.length;
+                }
+            });
+
+            // Add a focus listener to the container to track the last active input
+            editorPanel.addEventListener('focusin', (e) => {
+                if (e.target.classList.contains('template-input')) {
+                    lastFocusedInput = e.target;
+                }
+            });
+
+            // Save changes to the in-memory object whenever the user types
+            editorPanel.addEventListener('input', (e) => {
+                if (e.target.classList.contains('template-input')) {
+                    updateMappingsFromUI();
                 }
             });
 

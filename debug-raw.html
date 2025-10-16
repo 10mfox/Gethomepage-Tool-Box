@@ -88,6 +88,13 @@
                 const sources = await response.json();
                 sourceSelector.innerHTML = '<option value="">-- Select a Source --</option>' + sources.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
             };
+            
+            const fetchRawActivity = async (source) => {
+                const response = await fetch(`/api/debug/raw-data?source=${source}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'An unknown error occurred.');
+                return data;
+            };
 
             sourceSelector.addEventListener('change', async () => {
                 const source = sourceSelector.value;
@@ -96,7 +103,15 @@
                 fetchButton.disabled = true;
                 resultsPre.classList.add('hidden');
 
-                if (!source) return;
+                if (!source) {
+                    return;
+                }
+                
+                if (source.includes('activity') || source.includes('history') || source.includes('sessions')) {
+                    librarySelector.classList.add('hidden');
+                    fetchButton.disabled = false;
+                    return;
+                }
 
                 try {
                     const response = await fetch(`/api/${source}/libraries`);
@@ -104,6 +119,7 @@
                     const libraries = await response.json();
                     librarySelector.innerHTML = '<option value="">-- Select a Library --</option>' + libraries.map(lib => `<option value="${lib.section_id}">${lib.section_name}</option>`).join('');
                     librarySelector.disabled = false;
+                    librarySelector.classList.remove('hidden');
                 } catch (e) {
                     showNotification(e.message);
                 }
@@ -117,14 +133,20 @@
                 const source = sourceSelector.value;
                 const libraryId = librarySelector.value;
 
-                if (!source || !libraryId) return;
+                if (!source) return;
+                if (!source.includes('activity') && !source.includes('history') && !source.includes('sessions') && !libraryId) return;
 
                 loadingDiv.classList.remove('hidden');
                 resultsPre.classList.add('hidden');
                 fetchButton.disabled = true;
 
                 try {
-                    const response = await fetch(`/api/debug/raw-data?source=${source}&library_id=${libraryId}`);
+                    let url = `/api/debug/raw-data?source=${source}`;
+                    if (!source.includes('activity') && !source.includes('history') && !source.includes('sessions')) {
+                        url += `&library_id=${libraryId}`;
+                    }
+
+                    const response = await fetch(url);
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.error || 'An unknown error occurred.');
                     
