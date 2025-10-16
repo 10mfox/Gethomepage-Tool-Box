@@ -9,6 +9,7 @@ import threading
 import logging
 import time
 
+
 app = Flask(__name__, template_folder='.')
 
 # --- Swagger/Flasgger Configuration ---
@@ -19,6 +20,20 @@ swagger_template = {
         "description": "API for fetching media server data and managing configurations.",
         "version": os.environ.get('VERSION', 'dev')
     },
+    "tags": [
+        {
+            "name": "Data",
+            "description": "Endpoints for fetching processed data from media servers."
+        },
+        {
+            "name": "Editor",
+            "description": "Endpoints for the configuration file editor."
+        },
+        {
+            "name": "Mappings",
+            "description": "Endpoints for managing title-formatting mappings."
+        }
+    ],
     "definitions": {
         "Library": {
             "type": "object",
@@ -67,6 +82,28 @@ POLL_INTERVAL_SECONDS = int(os.environ.get('POLL_INTERVAL', 15))
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', 30))
 
 log = logging.getLogger(__name__)
+
+# --- Helper Functions ---
+def _ticks_to_hhmmss(ticks):
+    """Converts 100-nanosecond ticks to a HH:MM:SS string."""
+    if not ticks or ticks <= 0:
+        return "00:00:00"
+    seconds = ticks // 10000000
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+def _ms_to_hhmmss(milliseconds):
+    """Converts milliseconds to a HH:MM:SS string."""
+    try:
+        ms = int(milliseconds)
+        if ms <= 0: return "00:00:00"
+        seconds = ms // 1000
+        m, s = divmod(seconds, 60)
+        h, m = divmod(m, 60)
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    except (ValueError, TypeError):
+        return "00:00:00"
 
 # --- Jellystat Functions ---
 def _get_jellystat_headers():
@@ -186,6 +223,36 @@ def get_version():
     """
     return jsonify({"version": VERSION})
 
+@app.route('/api/main-sources', methods=['GET'])
+def get_main_sources():
+    """
+    Get Main Data Sources
+    ---
+    description: Returns a list of configured data sources intended for the main 'Recently Added' page. This excludes special-purpose sources like 'jellystat-activity'.
+    responses:
+      200:
+        description: A list of configured data sources for the main page.
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                example: 'tautulli'
+              name:
+                type: string
+                example: 'Tautulli'
+    """
+    sources = []
+    if TAUTULLI_URL and TAUTULLI_API_KEY:
+        sources.append({"id": "tautulli", "name": "Tautulli"})
+    if JELLYSTAT_URL and JELLYSTAT_API_KEY:
+        sources.append({"id": "jellystat", "name": "Jellystat"})
+    if AUDIOBOOKSHELF_URL and AUDIOBOOKSHELF_API_KEY:
+        sources.append({"id": "audiobookshelf", "name": "Audiobookshelf"})
+    return jsonify(sources)
+
 @app.route('/api/sources', methods=['GET'])
 def get_sources():
     """
@@ -212,6 +279,11 @@ def get_sources():
         sources.append({"id": "tautulli", "name": "Tautulli"})
     if JELLYSTAT_URL and JELLYSTAT_API_KEY:
         sources.append({"id": "jellystat", "name": "Jellystat"})
+        # Add a special source for the raw data viewer to target the activity endpoint
+        sources.append({"id": "jellystat-activity", "name": "Jellystat (Activity)"})
+        sources.append({"id": "jellystat-history", "name": "Jellystat (History)"})
+        sources.append({"id": "tautulli-activity", "name": "Tautulli (Activity)"})
+
     if AUDIOBOOKSHELF_URL and AUDIOBOOKSHELF_API_KEY:
         sources.append({"id": "audiobookshelf", "name": "Audiobookshelf"})
     return jsonify(sources)
@@ -396,6 +468,199 @@ def get_audiobookshelf_libraries():
         # The internal function already logged the detailed error
         return jsonify({"error": str(e)}), 502
 
+@app.route('/api/activity', methods=['GET'])
+def get_activity():
+    """
+    Get User Activity
+    ---
+    tags:
+      - Data
+    description: Fetches current user activity and last played items from a specified source.
+    parameters:
+      - name: source
+        in: query
+        type: string
+        required: true
+        description: The data source to query.
+        enum: ['tautulli', 'jellystat']
+      - name: dateFormat
+        in: query
+        type: string
+        required: false
+        description: "The desired date format for 'last played' items."
+        enum: ['short', 'relative']
+    responses:
+      200:
+        description: A list of active and last-played sessions.
+      400:
+        description: The 'source' query parameter is missing or invalid.
+      500:
+        description: The requested source is not configured on the server.
+      502:
+        description: Failed to communicate with the source.
+    """
+    source = request.args.get('source')
+    if not source:
+        return jsonify({"error": "A 'source' query parameter is required."}), 400
+        
+    now = time.time()
+    date_format = _get_date_format_from_request()
+
+    if source == 'jellystat':
+        if not JELLYSTAT_URL or not JELLYSTAT_API_KEY:
+            return jsonify({"error": "Jellystat is not configured on the server."}), 500
+        try:
+            base_url = _get_jellystat_base_url()
+            headers = _get_jellystat_headers()
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                sessions_future = executor.submit(requests.get, f"{base_url}/proxy/getSessions", headers=headers, timeout=REQUEST_TIMEOUT)
+                history_future = executor.submit(requests.get, f"{base_url}/stats/getAllUserActivity", headers=headers, timeout=REQUEST_TIMEOUT)
+                sessions_response, history_response = sessions_future.result(), history_future.result()
+            sessions_response.raise_for_status()
+            history_response.raise_for_status()
+            sessions = sessions_response.json()
+            history = history_response.json()
+
+            playing_items, last_played_items, active_user_ids = [], [], set()
+
+            for session in sessions:
+                if not session.get('NowPlayingItem'): continue
+                active_user_ids.add(session.get('UserId'))
+                now_playing = session.get('NowPlayingItem', {})
+                play_state = session.get('PlayState', {})
+                transcoding_info = session.get('TranscodingInfo') or {} # Ensure transcoding_info is a dict
+                full_session_data = {**session, **now_playing, **play_state, **transcoding_info}
+
+                if play_state.get('IsPaused'):
+                    full_session_data['status'] = "Paused"
+                    full_session_data['status_dot'] = '🟡'
+                else:
+                    full_session_data['status'] = "Playing"
+                    full_session_data['status_dot'] = '🟢'
+
+                position_ticks, runtime_ticks = play_state.get('PositionTicks', 0), now_playing.get('RunTimeTicks', 0)
+                full_session_data['PositionTicks_hhmmss'], full_session_data['RunTimeTicks_hhmmss'] = _ticks_to_hhmmss(position_ticks), _ticks_to_hhmmss(runtime_ticks)
+
+                # Ensure CompletionPercentage is always available, calculating it if necessary.
+                if 'CompletionPercentage' not in full_session_data:
+                    if runtime_ticks and runtime_ticks > 0:
+                        percentage = (position_ticks / runtime_ticks) * 100
+                        full_session_data['CompletionPercentage'] = round(percentage, 2)
+                    else:
+                        full_session_data['CompletionPercentage'] = 0
+
+                formatted_parts = mapping_manager.apply_activity_mapping(full_session_data, source='jellystat', sub_type='activity')
+                playing_items.append({"title": formatted_parts.get('title', 'Unknown Title'), "user": formatted_parts.get('user', 'Unknown User')})
+
+            # Process last played items for users who are not currently active
+            for item in history:
+                if item.get('UserId') in active_user_ids: continue
+                
+                # Prepare data for mapping
+                item['status'] = 'Last Played'
+                item['status_dot'] = '🔴'
+
+                # Format the date if requested
+                last_activity_str = item.get('LastActivityDate')
+                if last_activity_str and date_format:
+                    try:
+                        # Ensure the date string is in the correct ISO format with Z
+                        if '.' in last_activity_str: last_activity_str = last_activity_str.split('.')[0] + 'Z'
+                        utc_dt = datetime.strptime(last_activity_str, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                        timestamp = utc_dt.timestamp()
+                        temp_item_for_formatting = {'added_at': int(timestamp)}
+                        _format_dates_in_response({'temp': {'items': [temp_item_for_formatting]}}, date_format, now)
+                        item['LastActivityDate_formatted'] = temp_item_for_formatting['added_at']
+                    except (ValueError, TypeError) as e:
+                        log.warning(f"Could not parse or format Jellystat LastActivityDate '{last_activity_str}': {e}")
+                
+                formatted_parts = mapping_manager.apply_activity_mapping(item, source='jellystat', sub_type='last_played_activity')
+                last_played_items.append({"title": formatted_parts.get('title', 'Unknown Title'), "user": formatted_parts.get('user', 'Unknown User')})
+
+            return jsonify(playing_items + last_played_items)
+        except Exception as e:
+            log.error(f"Failed to fetch Jellystat activity: {e}")
+            return jsonify({"error": "Failed to communicate with Jellystat."}), 502
+
+    elif source == 'tautulli':
+        def format_last_played_date(item, date_format, now):
+            """
+            A dedicated date formatter for single 'last played' items.
+            This avoids the complexity of the bulk formatter.
+            """
+            if not date_format or 'stopped' not in item:
+                return
+            
+            timestamp = item['stopped']
+            if date_format == 'short':
+                item['stopped_formatted'] = datetime.fromtimestamp(timestamp).strftime('%b %d')
+            elif date_format == 'relative':
+                seconds = int(now - timestamp)
+                if seconds < 60: item['stopped_formatted'] = f"{seconds}s ago"
+                elif seconds < 3600: item['stopped_formatted'] = f"{seconds // 60}m ago"
+                elif seconds < 86400: item['stopped_formatted'] = f"{seconds // 3600}h ago"
+                elif seconds < 2592000: item['stopped_formatted'] = f"{seconds // 86400}d ago"
+                elif seconds < 31536000: item['stopped_formatted'] = f"{seconds // 2592000}mo ago"
+                else: item['stopped_formatted'] = f"{seconds // 31536000}y ago"
+
+
+        if not TAUTULLI_URL or not TAUTULLI_API_KEY:
+            return jsonify({"error": "Tautulli is not configured on the server."}), 500
+        try:
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                activity_future = executor.submit(requests.get, f"{TAUTULLI_URL}/api/v2", params={"apikey": TAUTULLI_API_KEY, "cmd": "get_activity"}, timeout=REQUEST_TIMEOUT)                
+                history_future = executor.submit(requests.get, f"{TAUTULLI_URL}/api/v2", params={"apikey": TAUTULLI_API_KEY, "cmd": "get_history", "length": 250}, timeout=REQUEST_TIMEOUT)
+                activity_response, history_response = activity_future.result(), history_future.result()
+            activity_response.raise_for_status()
+            history_response.raise_for_status()
+            sessions = activity_response.json().get('response', {}).get('data', {}).get('sessions', [])
+            history = history_response.json().get('response', {}).get('data', {}).get('data', [])
+            playing_items, last_played_items, active_user_ids = [], [], set()
+            for session in sorted(sessions, key=lambda s: s.get('state', 'z')):
+                active_user_ids.add(str(session.get('user_id')))
+                state = session.get('state', 'unknown').lower()
+                if state == 'playing':
+                    session['status_dot'] = '🟢'
+                elif state == 'paused':
+                    session['status_dot'] = '🟡'
+                else:
+                    session['status_dot'] = '⚪' # for buffering, etc.
+                session['status'] = state.capitalize()
+
+                # Add formatted time fields similar to Jellystat
+                duration_ms = session.get('duration', 0)
+                view_offset_ms = session.get('view_offset', 0)
+                session['duration_hhmmss'] = _ms_to_hhmmss(duration_ms)
+                session['view_offset_hhmmss'] = _ms_to_hhmmss(view_offset_ms)
+
+                formatted_parts = mapping_manager.apply_activity_mapping(session, 'tautulli', 'activity')
+                playing_items.append({"title": formatted_parts.get('title', 'Unknown Title'), "user": formatted_parts.get('user', 'Unknown User')})
+
+            # Process history to find the last played item for each user not currently active.
+            latest_history_by_user = {}
+            for item in history:
+                user_id = str(item.get('user_id'))
+                if user_id not in active_user_ids and user_id not in latest_history_by_user:
+                    latest_history_by_user[user_id] = item
+
+            for user_id, last_played in latest_history_by_user.items():
+                last_played['status'], last_played['status_dot'] = 'Last Played', '🔴'
+                stopped_timestamp = last_played.get('stopped', 0)
+                if stopped_timestamp and date_format:
+                    format_last_played_date(last_played, date_format, now)
+                formatted_parts = mapping_manager.apply_activity_mapping(last_played, 'tautulli', 'last_played_activity')
+                last_played_items.append({"title": formatted_parts.get('title', 'Unknown Title'), "user": formatted_parts.get('user', 'Unknown User'), "stopped": stopped_timestamp})
+
+            sorted_last_played = sorted(last_played_items, key=lambda x: x.get('stopped', 0), reverse=True)
+            for item in sorted_last_played: del item['stopped']
+            return jsonify(playing_items + sorted_last_played)
+        except Exception as e:
+            log.error(f"Failed to fetch Tautulli activity: {e}")
+            return jsonify({"error": "Failed to communicate with Tautulli."}), 502
+
+    else:
+        return jsonify({"error": f"Source '{source}' not supported for activity."}), 400
+
 # --- Debug Endpoints ---
 @debug_bp.route('/raw-data')
 def get_raw_data():
@@ -428,9 +693,6 @@ def get_raw_data():
     source = request.args.get('source')
     library_id = request.args.get('library_id')
 
-    if not source or not library_id:
-        return jsonify({"error": "source and library_id parameters are required"}), 400
-
     try:
         if source == 'tautulli':
             if not TAUTULLI_URL or not TAUTULLI_API_KEY:
@@ -462,11 +724,35 @@ def get_raw_data():
             response.raise_for_status()
             return jsonify(response.json())
 
+        elif source == 'jellystat-activity':
+            if not JELLYSTAT_URL or not JELLYSTAT_API_KEY: return jsonify({"error": "Jellystat not configured"}), 500
+            base_url = _get_jellystat_base_url()
+            headers = _get_jellystat_headers()
+            response = requests.get(f"{base_url}/proxy/getSessions", headers=headers, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+            return jsonify(response.json())
+
+        elif source == 'tautulli-activity':
+            if not TAUTULLI_URL or not TAUTULLI_API_KEY: return jsonify({"error": "Tautulli not configured"}), 500
+            params = {"apikey": TAUTULLI_API_KEY, "cmd": "get_activity"}
+            response = requests.get(f"{TAUTULLI_URL}/api/v2", params=params, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+            return jsonify(response.json().get('response', {}).get('data', {}))
+
+        elif source == 'jellystat-history':
+            if not JELLYSTAT_URL or not JELLYSTAT_API_KEY: return jsonify({"error": "Jellystat not configured"}), 500
+            base_url = _get_jellystat_base_url()
+            headers = _get_jellystat_headers()
+            response = requests.get(f"{base_url}/stats/getAllUserActivity", headers=headers, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+            return jsonify(response.json())
+
         elif source == 'audiobookshelf':
             if not AUDIOBOOKSHELF_URL or not AUDIOBOOKSHELF_API_KEY: return jsonify({"error": "Audiobookshelf not configured"}), 500
             response = requests.get(f"{AUDIOBOOKSHELF_URL}/api/libraries/{library_id}/items?sort=addedAt-desc&limit=5", headers=_get_audiobookshelf_headers(), timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             return jsonify(response.json().get('results', []))
+
     except Exception as e:
         return jsonify({"error": f"Failed to fetch raw data from {source}: {e}"}), 502
 
@@ -483,65 +769,47 @@ _cache_lock = threading.Lock()
 
 def _fetch_all_tautulli_data_concurrently():
     """Internal function to fetch all Tautulli data concurrently."""
-    # 1. Fetch libraries and history concurrently
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        libs_future = executor.submit(requests.get, f"{TAUTULLI_URL}/api/v2", params={"apikey": TAUTULLI_API_KEY, "cmd": "get_libraries"}, timeout=REQUEST_TIMEOUT)
-        history_future = executor.submit(requests.get, f"{TAUTULLI_URL}/api/v2", params={"apikey": TAUTULLI_API_KEY, "cmd": "get_history", "length": 250}, timeout=REQUEST_TIMEOUT)
+    # 1. Fetch all libraries first to get their IDs and details.
+    libs_params = {"apikey": TAUTULLI_API_KEY, "cmd": "get_libraries"}
+    libs_response = requests.get(f"{TAUTULLI_URL}/api/v2", params=libs_params, timeout=REQUEST_TIMEOUT)
+    libs_response.raise_for_status()
+    all_libraries = libs_response.json().get('response', {}).get('data', [])
 
-        all_libraries = libs_future.result().json().get('response', {}).get('data', [])
+    def fetch_for_library(library):
+        """Fetch raw recently added items for a single library."""
+        ra_params = {"apikey": TAUTULLI_API_KEY, "cmd": "get_recently_added", "section_id": library['section_id'], "count": 15}
+        ra_response = requests.get(f"{TAUTULLI_URL}/api/v2", params=ra_params, timeout=REQUEST_TIMEOUT)
+        ra_response.raise_for_status()
+        return library.get('section_name'), ra_response.json().get('response', {}).get('data', {}).get('recently_added', [])
 
+    # 2. Prepare the data structure.
     data_by_library = {}
+    
     for lib in all_libraries:
-        section_name = lib.get('section_name')
-        if section_name:
-            counts = {}
-            section_type = lib.get('section_type')
-            if section_type == 'show': # This is the correct type from Tautulli for TV Show libraries
-                counts['Shows'] = lib.get('count')
-                counts['Seasons'] = lib.get('parent_count')
-                counts['Episodes'] = lib.get('child_count')
-            elif section_type == 'movie':
-                counts['Movies'] = lib.get('count')
-            elif section_type == 'artist':
-                counts['Artists'] = lib.get('count')
-                counts['Albums'] = lib.get('parent_count')
-            data_by_library[section_name] = {'items': [], 'counts': counts}
+        counts = {}
+        section_type = lib.get('section_type')
+        if section_type == 'show':
+            counts['Shows'] = lib.get('count')
+            counts['Seasons'] = lib.get('parent_count')
+            counts['Episodes'] = lib.get('child_count')
+        elif section_type == 'movie':
+            counts['Movies'] = lib.get('count')
+        elif section_type == 'artist':
+            counts['Artists'] = lib.get('count')
+            counts['Albums'] = lib.get('parent_count')
 
-    def fetch_and_process_for_library(library):
-        """Fetch, enrich, and process recently added items for a single library."""
-        library_name = library.get('section_name') # This is the key for our dictionary
-        if not library_name:
-            return None, []
+        data_by_library[lib['section_name']] = {
+            'items': [],
+            'counts': counts
+        }
 
-        try:
-            # 1. Get the list of recently added items
-            params = {"apikey": TAUTULLI_API_KEY, "cmd": "get_recently_added", "section_id": library['section_id'], "count": 15} # Keep this count low for performance
-            response = requests.get(f"{TAUTULLI_URL}/api/v2", params=params, timeout=REQUEST_TIMEOUT)
-            response.raise_for_status()
-            recently_added = response.json().get('response', {}).get('data', {}).get('recently_added', [])
-            
-            # 2. Fetch detailed metadata for each item to get all fields for mapping
-            def fetch_metadata(item):
-                meta_params = {"apikey": TAUTULLI_API_KEY, "cmd": "get_metadata", "rating_key": item['rating_key']} # This call can be slow
-                meta_response = requests.get(f"{TAUTULLI_URL}/api/v2", params=meta_params, timeout=REQUEST_TIMEOUT)
-                if meta_response.ok:
-                    detailed_data = meta_response.json().get('response', {}).get('data', {})
-                    return {**item, **detailed_data}
-                return item
+    # 3. Fetch 'recently added' for each library concurrently.
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = executor.map(fetch_for_library, all_libraries)
 
-            with ThreadPoolExecutor(max_workers=10) as meta_executor:
-                enriched_items = list(meta_executor.map(fetch_metadata, recently_added))
-
-            # 3. Return the raw, enriched items. Processing will happen on-demand.
-            return library_name, enriched_items
-        except Exception as e:
-            log.warning(f"Error fetching and processing for library {library_name}: {e}")
-            return library_name, []
-
-    with ThreadPoolExecutor(max_workers=10) as executor: # This can be slow if many libraries exist
-        for library_name, processed_items in executor.map(fetch_and_process_for_library, all_libraries):
-            if library_name in data_by_library: # Check if the library exists in our prepared structure
-                data_by_library[library_name]['items'] = processed_items 
+    for library_name, items in results:
+        if library_name in data_by_library:
+            data_by_library[library_name]['items'] = items
 
     return data_by_library
 
@@ -602,9 +870,11 @@ def _fetch_all_jellystat_data_concurrently():
             log.warning(f"Error fetching Jellystat recently added for library {library.get('Name')}: {e}")
             return library.get('Name'), []
 
-    # 2. Fetch all 'recently_added' data concurrently
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        results = executor.map(fetch_for_library, all_libraries)
+    # 2. Fetch all 'recently_added' data sequentially to avoid overwhelming Jellystat.
+    # Jellystat appears to be sensitive to concurrent requests.
+    results = []
+    for library in all_libraries:
+        results.append(fetch_for_library(library))
 
     # 3. Process all results
     for library_name, raw_items in results:
@@ -796,6 +1066,12 @@ def get_added():
         required: false
         description: "The desired date format."
         enum: ['short', 'relative']
+      - name: count
+        in: query
+        type: integer
+        required: false
+        description: "The maximum number of items to return per library."
+        default: 15
     responses:
       200:
         description: A dictionary of recently added items with formatted titles, grouped by library name.
@@ -811,6 +1087,7 @@ def get_added():
     now = time.time()
     date_format = request.args.get('dateFormat')
     source = request.args.get('source')
+    count = request.args.get('count', default=15, type=int)
 
     if not source:
         return jsonify({"error": "A 'source' query parameter is required."}), 400
@@ -829,7 +1106,7 @@ def get_added():
     processed_data = {}
     for library_name, library_data in data_copy.items():
         processed_items = []
-        raw_items = library_data.get("items", [])
+        raw_items = library_data.get("items", [])[:count] # Apply the count limit here
 
         if source == 'tautulli':
             for item in raw_items:
@@ -872,30 +1149,33 @@ def prime_and_start_cache_threads(is_refresh=False):
     new_timestamp_cache = {}
 
     with ThreadPoolExecutor(max_workers=len(configured_sources) or 1) as executor:
-        futures = {executor.submit(source_map[source['id']]["data_fetcher"]): source['id'] for source in configured_sources}
-        for future in futures:
-            source_id = futures[future]
+        # Filter sources to only include those defined in the source_map for caching
+        cacheable_sources = [s for s in configured_sources if s['id'] in source_map]
+
+        def prime_and_start_thread(source):
+            source_id = source['id']
             try:
-                initial_data = future.result()
+                data_fetcher = source_map[source_id]["data_fetcher"]
+                initial_data = data_fetcher()
                 new_data_cache[source_id] = initial_data
                 new_timestamp_cache[source_id] = time.time()
-
                 log.info(f"Initial cache for {source_id} populated successfully.")
 
-                # Now that the data is ready, get the state and start the background thread
-                # Only start background threads on the initial prime, not on a manual refresh.
-                if is_refresh: continue
-
+                # Only start background threads on the initial prime, not on a manual refresh
+                if is_refresh:
+                    return
+                
                 state_fetcher = source_map[source_id]["state_fetcher"]
                 initial_state = state_fetcher()
-
                 cache_thread = threading.Thread(target=update_cache_in_background, args=(source_id, initial_state), daemon=True)
                 cache_thread.start()
                 log.info(f"Background cache-refresh thread for {source_id} started.")
-                if initial_state is None:
-                    log.warning(f"Could not get initial state for {source_id}. The background thread will keep trying.")
             except Exception as e:
-                log.error(f"FATAL: Could not perform initial cache for {source_id}. Error: {e}")
+                log.error(f"Could not perform initial cache for {source_id}. This source will be unavailable until the next restart. Error: {e}")
+
+        # Run the priming process for each source
+        executor.map(prime_and_start_thread, cacheable_sources)
+
     with _cache_lock:
         _all_data_cache["data"] = new_data_cache
         _all_data_cache["timestamp"] = new_timestamp_cache
