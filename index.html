@@ -98,7 +98,7 @@
 
             const initializeSources = async () => {
                 try {
-                    const response = await fetch('/api/sources');
+                    const response = await fetch('/api/main-sources');
                     const sources = await response.json();
                     if (sources.length === 0) {
                         librarySelector.innerHTML = '<p class="text-red-400">-- No data source (Tautulli/Jellystat) is configured. --</p>';
