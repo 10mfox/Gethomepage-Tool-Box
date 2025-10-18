@@ -1,6 +1,6 @@
 # Media Manager & Homepage Tool-Box
 
-A powerful, fast, and efficient web-based tool to manage your self-hosted services. It provides a "Recently Added" viewer for your media servers (Plex via Tautulli, Jellyfin/Emby via Jellystat, Audiobookshelf) and includes a suite of live editors for your `gethomepage` configuration files.
+A powerful, fast, and efficient web-based tool to manage your self-hosted services. It provides a "Recently Added" viewer for your media servers (Plex via Tautulli, Jellyfin/Emby via Jellystat, Audiobookshelf) and includes a suite of live editors for your `gethomepage` configuration files. If no media servers are configured, it defaults to the CSS GUI Editor for immediate use.
 
 :arrow_right: **Click here to see my project roadmap**
 
@@ -13,10 +13,11 @@ https://github.com/user-attachments/assets/4b0e2f1c-41ce-42bc-8e4e-82d149bb7e4e
     - View currently playing and paused sessions from Tautulli and Jellystat.
     - See the last played item for users who are not currently active.
 - **Configuration Editor Suite**:
-    - **File Editor** (`/editor`): A full-featured editor to modify all your `gethomepage` YAML, CSS, and JS configuration files.
+    - **File Editor** (`/editor`): A full-featured editor to modify all your `gethomepage` YAML, CSS, and JS configuration files. (Optional, enable with `ENABLE_CONFIG_EDITOR=true`)
     - **CSS GUI Editor** (`/editor/css-gui`): A visual editor with color pickers and sliders to customize your `gethomepage` theme and see the results instantly in a live preview pane.
     - **Mappings Editor** (`/editor/mappings`): Customize how media titles are displayed using templates and available data fields from your media servers.
-    - **Raw Data Viewer** (`/editor/debug-raw`): A tool to inspect the raw data from your media servers, perfect for discovering fields to use in your title mappings.
+    - **Raw Data Viewer** (`/editor/debug-raw`): A tool to inspect the raw data from your media servers, perfect for discovering fields to use in your title mappings. (Optional, enable with `ENABLE_DEBUG=true`)
+- **YAML Widget Generator**: A tool within the Mappings Editor to quickly generate the necessary YAML configuration for "Recently Added" and "User Activity" widgets for your homepage.
 - **Smart Library Selection**: Dynamically fetches and lists your libraries from the selected source, with all libraries selected by default for immediate viewing.
 - **Grouped Display**: Displays recently added items grouped by library for clarity.
 - **Flexible Date Formatting**: Choose how to display the "added at" timestamp:
@@ -82,6 +83,9 @@ services:
       # --- Optional: Advanced settings ---
       - POLL_INTERVAL=15 # How often (in seconds) to check for library updates. Default: 15
       - REQUEST_TIMEOUT=30 # How long (in seconds) to wait for API responses. Default: 30
+      # --- Optional: Enable advanced editor features ---
+      - ENABLE_CONFIG_EDITOR=true # Set to true to enable the full config file editor
+      - ENABLE_DEBUG=true # Set to true to enable the raw data viewer
       - GUNICORN_TIMEOUT=60 # Gunicorn worker timeout. Increase if you have very large libraries. Default: 30
     restart: unless-stopped
     volumes:

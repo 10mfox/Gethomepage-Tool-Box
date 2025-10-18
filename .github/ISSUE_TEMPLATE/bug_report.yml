@@ -29,17 +29,44 @@ body:
     validations:
       required: true
   - type: dropdown
+    id: area
+    attributes:
+      label: Application Area
+      description: Which part of the application is affected by this bug?
+      options:
+        - Media Manager (Main Page)
+        - Config Editor
+        - CSS GUI Editor
+        - Mappings Editor
+        - YAML Generator
+        - Installation / Docker
+        - Other
+    validations:
+      required: true
+  - type: dropdown
     id: data-source
     attributes:
       label: Environment - Data Source
-      description: Which data source is related to this bug?
+      description: If applicable, which data source is related to this bug?
       options:
+        - Not Applicable
         - Tautulli
         - Jellystat
         - Audiobookshelf
         - Other (Please specify below)
     validations:
       required: true
+  - type: input
+    id: version
+    attributes:
+      label: Application Version
+      description: "Please provide the version of the application. You can find this in the top right on the CSS GUI page, or by checking the tag of your `ghcr.io/10mfox/gethomepage-tool-box` image."
+      placeholder: "e.g., v1.5.0 or latest"
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain your problem. You can drag and drop images here.
   - type: textarea
     id: logs
     attributes:

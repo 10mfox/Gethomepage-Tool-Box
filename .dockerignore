@@ -1,0 +1,15 @@
+# Git
+.git
+.gitignore
+
+# Docker
+docker-compose.yml
+
+# Config folder (mounted as a volume)
+config/
+
+# Python
+__pycache__/
+*.pyc
+.venv
+venv

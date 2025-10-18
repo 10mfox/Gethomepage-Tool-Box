@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Media Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,40 +14,113 @@
         .btn-primary { background-color: #4299e1; }
         .btn-primary:hover { background-color: #3182ce; }
         input { background-color: #4a5568; }
+        select {
+            background-color: #4a5568;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23e2e8f0' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+        }
         .error-msg { background-color: #c53030; color: white; }
+        .nav-link {
+            @apply px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white;
+        }
+        .nav-link.active {
+            color: #ffffff;
+            font-weight: 700;
+            border-bottom: 3px solid #3b82f6; /* blue-500 */
+        }
     </style>
 </head>
-<body class="p-4 md:p-8">
-    <div class="max-w-6xl mx-auto">
-        <div class="relative flex justify-center items-start mb-6">
-            <div class="text-center">
-                <h1 class="text-3xl md:text-4xl font-bold">Recently Added Manager</h1>
-                <div id="app-version" class="text-sm text-gray-400 mt-1"></div>
+<body class="flex flex-col h-screen">
+    <header class="bg-gray-800 shadow-md">
+        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <h1 class="text-xl font-bold text-white">Homepage Tool-Box</h1>
+                    </div>
+                    <div class="hidden md:block" id="desktop-menu">
+                        <div class="ml-10 flex items-center space-x-4">
+                            {% if any_source_configured %}
+                            <a href="/" class="nav-link active">Media Manager</a>
+                            {% endif %}
+                            {% if enable_config_editor %}
+                            <a href="/editor" class="nav-link">Config Editor</a>
+                            {% endif %}
+                            <a href="/editor/css-gui" class="nav-link">CSS GUI</a>
+                            {% if any_source_configured %}
+                            <a href="/editor/mappings" class="nav-link">Mappings</a>
+                            {% if enable_debug %}
+                            <a href="/editor/debug-raw" class="nav-link">Raw Data</a>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    {% if any_source_configured %}
+                    <div class="hidden md:block">
+                        <div class="ml-4 flex items-center md:ml-6 space-x-4">
+                            <a href="https://ko-fi.com/10mfox" target="_blank" rel="noopener noreferrer" class="text-sm text-pink-400 hover:text-pink-300">❤️ Support Me</a>
+                            <div id="app-version" class="text-sm text-gray-400"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="-mr-2 flex md:hidden">
+                        <!-- Mobile menu button -->
+                        <button type="button" id="mobile-menu-button" class="bg-gray-800 inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white" aria-controls="mobile-menu" aria-expanded="false">
+                            <span class="sr-only">Open main menu</span>
+                            <svg class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                            <svg class="hidden h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="absolute right-0 top-0 h-full flex items-center">
-                <a href="https://ko-fi.com/10mfox" target="_blank" rel="noopener noreferrer" class="text-sm text-pink-400 hover:text-pink-300">❤️ Support Me</a>
+            <!-- Mobile menu, show/hide based on menu state. -->
+            <div class="md:hidden hidden" id="mobile-menu">
+                <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                    {% if any_source_configured %}
+                    <a href="/" class="nav-link active block">Media Manager</a>
+                    {% endif %}
+                    {% if enable_config_editor %}
+                    <a href="/editor" class="nav-link block">Config Editor</a>
+                    {% endif %}
+                    <a href="/editor/css-gui" class="nav-link block">CSS GUI</a>
+                    {% if any_source_configured %}
+                    <a href="/editor/mappings" class="nav-link block">Mappings</a>
+                    {% if enable_debug %}
+                    <a href="/editor/debug-raw" class="nav-link block">Raw Data</a>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                {% if any_source_configured %}
+                <div class="pt-4 pb-3 border-t border-gray-700">
+                    <div class="flex items-center px-5 space-x-4">
+                        <a href="https://ko-fi.com/10mfox" target="_blank" rel="noopener noreferrer" class="text-sm text-pink-400 hover:text-pink-300">❤️ Support Me</a>
+                        <div id="app-version-mobile" class="text-sm text-gray-400"></div>
+                    </div>
+                </div>
+                {% endif %}
             </div>
-        </div>
-        <div class="flex justify-center flex-wrap gap-x-4 gap-y-2 mb-6">
-            <a href="/editor" class="text-blue-400 hover:text-blue-300">Config Editor</a>
-            <a href="/editor/css-gui" class="text-blue-400 hover:text-blue-300">CSS GUI Editor</a>
-            <a href="/editor/mappings" class="text-blue-400 hover:text-blue-300">Mappings Editor</a>
-            <a href="/editor/debug-raw" class="text-blue-400 hover:text-blue-300">Raw Data Viewer</a>
-        </div>
-        
+        </nav>
+    </header>
+
+    <main class="flex-grow p-4 md:p-8 overflow-y-auto">
+        <div class="max-w-6xl mx-auto">
         <!-- Configuration -->
         <div id="config-card" class="card p-6 rounded-lg shadow-lg mb-8">
-            <div class="flex flex-col md:flex-row md:justify-between md:items-start space-y-4 md:space-y-0">
-                <h2 id="main-title" class="text-2xl font-semibold">Recently Added</h2>
-                <div class="flex flex-col items-start space-y-2 md:flex-row md:items-center md:space-y-0 md:space-x-4">
-                    <div id="source-selector-container" class="hidden items-center space-x-2">
-                        <label for="source-selector" class="font-semibold">Source:</label>
-                        <select id="source-selector" class="p-2 rounded" style="background-color: #4a5568;"></select>
-                    </div>
-                    <label for="library-selector" class="font-semibold">Select Library:</label>
-                    <div id="library-selector" class="flex flex-wrap gap-x-4 gap-y-2 p-2 rounded w-full md:w-auto" style="background-color: #4a5568;"><p>-- Loading Libraries --</p></div>
+            <h2 id="main-title" class="text-2xl font-semibold mb-4">Recently Added</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div id="source-selector-container" class="hidden flex-col">
+                    <label for="source-selector" class="font-semibold mb-2">Source:</label>
+                    <select id="source-selector" class="p-2 rounded"></select>
                 </div>
-                <div class="flex flex-col items-start space-y-2 md:flex-row md:items-center md:space-y-0 md:space-x-4">
+                <div class="flex flex-col">
                     <label class="font-semibold">Date Format:</label>
                     <div id="date-format-selector" class="flex flex-wrap gap-x-4 gap-y-2 p-2 rounded" style="background-color: #4a5568;">
                         <div class="flex items-center">
@@ -64,14 +137,19 @@
                         </div>
                     </div>
                 </div>
+                <div class="flex flex-col md:col-span-3">
+                    <label for="library-selector" class="font-semibold mb-2">Libraries:</label>
+                    <div id="library-selector" class="flex flex-wrap gap-x-4 gap-y-2 p-2 rounded" style="background-color: #4a5568;"><p>-- Loading Libraries --</p></div>
+                </div>
             </div>
         </div>
 
         <!-- Data Display -->
-        <div id="loading" class="text-center my-8 hidden">
-            <p class="text-xl">Loading...</p>
+            <div id="loading" class="text-center my-8 hidden">
+                <p class="text-xl">Loading...</p>
+            </div>
+            <div id="results" class="space-y-3"></div>
         </div>
-        <div id="results" class="space-y-3"></div>
     </div>
 
     <script>
@@ -83,6 +161,7 @@
             const sourceSelector = document.getElementById('source-selector');
             const sourceSelectorContainer = document.getElementById('source-selector-container');
             const mainTitle = document.getElementById('main-title');
+            const versionDivMobile = document.getElementById('app-version-mobile');
             let currentSource = '';
             let cachedAddedItems = {}; // Store fetched item data to avoid re-fetching
 
@@ -91,6 +170,7 @@
                     const response = await fetch('/api/version');
                     const data = await response.json();
                     versionDiv.textContent = `v${data.version}`;
+                    if(versionDivMobile) versionDivMobile.textContent = `v${data.version}`;
                 } catch (e) {
                     versionDiv.textContent = 'v-unknown';
                 }
@@ -285,6 +365,17 @@
             // Initialize sources, which will then trigger library population
             initializeSources();
             fetchVersion();
+
+            // Mobile menu toggle
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            const svgs = mobileMenuButton.querySelectorAll('svg');
+
+            mobileMenuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+                svgs[0].classList.toggle('hidden');
+                svgs[1].classList.toggle('hidden');
+            });
         });
     </script>
 </body>

@@ -18,9 +18,12 @@
     - [x] Mappings editor for custom title formatting (`/editor/mappings`).
     - [x] Raw data viewer for debugging and field discovery (`/editor/debug-raw`).
 - [x] Fixed Jellystat integration issues.
+- [x] Added optional environment variables (`ENABLE_CONFIG_EDITOR`, `ENABLE_DEBUG`) to simplify the default UI.
+- [x] Added YAML Widget Generator to Mappings Editor.
 - [x] Ensured all sources stay up-to-date with background polling.
 
 ## Planned
+- [ ] Add Radarr/Sonarr Support
 - [ ] Final Documentation Review
 - [ ] Final Performance Optimization & Testing
 

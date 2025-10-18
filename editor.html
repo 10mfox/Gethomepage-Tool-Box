@@ -14,7 +14,18 @@
         .btn-primary:hover { background-color: #3182ce; }
         .btn-secondary { background-color: #667eea; }
         .btn-secondary:hover { background-color: #5a67d8; }
-        select, textarea, input { background-color: #4a5568; }
+        textarea, input { background-color: #4a5568; }
+        select {
+            background-color: #4a5568;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23e2e8f0' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+        }
         .view-toggle { background-color: #4a5568; }
         .view-toggle:hover { background-color: #718096; }
         .view-toggle.active {
@@ -50,19 +61,72 @@
         .notification.success { background-color: #38a169; }
         .notification.error { background-color: #c53030; }
     </style>
+    <style>
+        .nav-link {
+            @apply px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white;
+        }
+        .nav-link.active {
+            color: #ffffff;
+            font-weight: 700;
+            border-bottom: 3px solid #3b82f6; /* blue-500 */
+        }
+    </style>
 </head>
 
 <body class="h-screen flex flex-col">
-    <header class="p-4 border-b border-gray-700">
-        <div class="max-w-full mx-auto flex justify-between items-center">
-            <h1 class="text-2xl md:text-4xl font-bold">Get-Homepage Config Editor</h1>
-            <div class="flex items-center space-x-4">
-                <a href="/editor/css-gui" class="text-blue-400 hover:text-blue-300">CSS GUI Editor &rarr;</a>
-                <a href="/editor/mappings" class="text-blue-400 hover:text-blue-300">Mappings Editor &rarr;</a>
-                <a href="/editor/debug-raw" class="text-blue-400 hover:text-blue-300">Raw Data Viewer &rarr;</a>
-                <a href="/" class="text-blue-400 hover:text-blue-300">&larr; Back to Media Manager</a>
+    <header class="bg-gray-800 shadow-md">
+        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <h1 class="text-xl font-bold text-white">Homepage Tool-Box</h1>
+                    </div>
+                    <div class="hidden md:block" id="desktop-menu">
+                        <div class="ml-10 flex items-center space-x-4">
+                            {% if any_source_configured %}
+                            <a href="/" class="nav-link">Media Manager</a>
+                            {% endif %}
+                            {% if enable_config_editor %}
+                            <a href="/editor" class="nav-link active">Config Editor</a>
+                            {% endif %}
+                            <a href="/editor/css-gui" class="nav-link">CSS GUI</a>
+                            {% if any_source_configured %}
+                            <a href="/editor/mappings" class="nav-link">Mappings</a>
+                            {% if enable_debug %}
+                            <a href="/editor/debug-raw" class="nav-link">Raw Data</a>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="-mr-2 flex md:hidden">
+                    <!-- Mobile menu button -->
+                    <button type="button" id="mobile-menu-button" class="bg-gray-800 inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white" aria-controls="mobile-menu" aria-expanded="false">
+                        <span class="sr-only">Open main menu</span>
+                        <svg class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                        <svg class="hidden h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
             </div>
-        </div>
+            <!-- Mobile menu, show/hide based on menu state. -->
+            <div class="md:hidden hidden" id="mobile-menu">
+                <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                    {% if any_source_configured %}
+                    <a href="/" class="nav-link block">Media Manager</a>
+                    {% endif %}
+                    {% if enable_config_editor %}
+                    <a href="/editor" class="nav-link active block">Config Editor</a>
+                    {% endif %}
+                    <a href="/editor/css-gui" class="nav-link block">CSS GUI</a>
+                    {% if any_source_configured %}
+                    <a href="/editor/mappings" class="nav-link block">Mappings</a>
+                    {% if enable_debug %}
+                    <a href="/editor/debug-raw" class="nav-link block">Raw Data</a>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </nav>
     </header>
 
     <main class="flex-grow flex flex-col md:flex-row overflow-hidden">
@@ -307,6 +371,17 @@
             // Set initial scale and add a listener for window resize events
             updatePreviewScaling();
             window.addEventListener('resize', updatePreviewScaling);
+
+            // Mobile menu toggle
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            const svgs = mobileMenuButton.querySelectorAll('svg');
+
+            mobileMenuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+                svgs[0].classList.toggle('hidden');
+                svgs[1].classList.toggle('hidden');
+            });
         });
     </script>
 </body>

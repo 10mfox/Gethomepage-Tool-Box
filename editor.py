@@ -1,6 +1,7 @@
 import os
 import logging
 from flask import Blueprint, jsonify, render_template, request
+from app import any_source_configured, ENABLE_CONFIG_EDITOR, ENABLE_DEBUG, TAUTULLI_URL, TAUTULLI_API_KEY, JELLYSTAT_URL, JELLYSTAT_API_KEY, AUDIOBOOKSHELF_URL, AUDIOBOOKSHELF_API_KEY
 
 from mapping_manager import get_mappings, get_default_mappings, save_mappings
 editor_bp = Blueprint('editor', __name__, template_folder='.')
@@ -18,23 +19,23 @@ ALLOWED_FILES = [
 def editor_index():
     """Serves the editor's frontend."""
     homepage_url = os.environ.get('HOMEPAGE_PREVIEW_URL', '')
-    return render_template('editor.html', homepage_preview_url=homepage_url)
+    return render_template('editor.html', homepage_preview_url=homepage_url, any_source_configured=any_source_configured, enable_config_editor=ENABLE_CONFIG_EDITOR, enable_debug=ENABLE_DEBUG)
 
 @editor_bp.route('/css-gui')
 def css_gui_index():
     """Serves the CSS GUI editor's frontend."""
     homepage_url = os.environ.get('HOMEPAGE_PREVIEW_URL', '')
-    return render_template('css-gui.html', homepage_preview_url=homepage_url)
+    return render_template('css-gui.html', homepage_preview_url=homepage_url, any_source_configured=any_source_configured, enable_config_editor=ENABLE_CONFIG_EDITOR, enable_debug=ENABLE_DEBUG)
 
 @editor_bp.route('/mappings')
 def mappings_editor_index():
     """Serves the Mappings editor's frontend."""
-    return render_template('mappings-editor.html')
+    return render_template('mappings-editor.html', any_source_configured=any_source_configured, enable_config_editor=ENABLE_CONFIG_EDITOR, enable_debug=ENABLE_DEBUG)
 
 @editor_bp.route('/debug-raw')
 def debug_raw_index():
     """Serves the Raw Data Viewer's frontend."""
-    return render_template('debug-raw.html')
+    return render_template('debug-raw.html', any_source_configured=any_source_configured, enable_config_editor=ENABLE_CONFIG_EDITOR, enable_debug=ENABLE_DEBUG)
 
 
 @editor_bp.route('/api/files', methods=['GET'])
@@ -150,7 +151,15 @@ def get_mappings_api():
       200:
         description: The current mapping configuration.
     """
-    return jsonify(get_mappings())
+    mappings = get_mappings()
+    filtered_mappings = {}
+    if TAUTULLI_URL and TAUTULLI_API_KEY and 'tautulli' in mappings:
+        filtered_mappings['tautulli'] = mappings['tautulli']
+    if JELLYSTAT_URL and JELLYSTAT_API_KEY and 'jellystat' in mappings:
+        filtered_mappings['jellystat'] = mappings['jellystat']
+    if AUDIOBOOKSHELF_URL and AUDIOBOOKSHELF_API_KEY and 'audiobookshelf' in mappings:
+        filtered_mappings['audiobookshelf'] = mappings['audiobookshelf']
+    return jsonify(filtered_mappings)
 
 @editor_bp.route('/api/mappings/default', methods=['GET'])
 def get_default_mappings_api():
@@ -163,7 +172,15 @@ def get_default_mappings_api():
       200:
         description: The default mapping configuration.
     """
-    return jsonify(get_default_mappings())
+    mappings = get_default_mappings()
+    filtered_mappings = {}
+    if TAUTULLI_URL and TAUTULLI_API_KEY and 'tautulli' in mappings:
+        filtered_mappings['tautulli'] = mappings['tautulli']
+    if JELLYSTAT_URL and JELLYSTAT_API_KEY and 'jellystat' in mappings:
+        filtered_mappings['jellystat'] = mappings['jellystat']
+    if AUDIOBOOKSHELF_URL and AUDIOBOOKSHELF_API_KEY and 'audiobookshelf' in mappings:
+        filtered_mappings['audiobookshelf'] = mappings['audiobookshelf']
+    return jsonify(filtered_mappings)
 
 @editor_bp.route('/api/mappings', methods=['POST'])
 def save_mappings_api():
