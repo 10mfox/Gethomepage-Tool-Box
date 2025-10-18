@@ -14,7 +14,17 @@
         .btn-primary:hover { background-color: #3182ce; }
         .btn-secondary { background-color: #667eea; }
         .btn-secondary:hover { background-color: #5a67d8; }
-        input, textarea { background-color: #4a5568; }
+        input, textarea, select { background-color: #4a5568; }
+        select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23e2e8f0' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+        }
         .field-tag {
             background-color: #4a5568;
             cursor: pointer;
@@ -30,25 +40,92 @@
         .notification.success { background-color: #38a169; }
         .notification.error { background-color: #c53030; }
     </style>
+    <style>
+        .nav-link {
+            @apply px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white;
+        }
+        .nav-link.active {
+            color: #ffffff;
+            font-weight: 700;
+            border-bottom: 3px solid #3b82f6; /* blue-500 */
+        }
+    </style>
 </head>
 
 <body class="h-screen flex flex-col">
-    <header class="p-4 border-b border-gray-700">
-        <div class="max-w-full mx-auto flex justify-between items-center">
-            <h1 class="text-2xl md:text-4xl font-bold">Mappings Editor</h1>
-            <div class="flex items-center space-x-4">
-                <a href="/editor" class="text-blue-400 hover:text-blue-300">&larr; Config Editor</a>
-                <a href="/editor/debug-raw" class="text-blue-400 hover:text-blue-300">Raw Data Viewer &rarr;</a>
-                <a href="/" class="text-blue-400 hover:text-blue-300">&larr; Back to Media Manager</a>
+    <header class="bg-gray-800 shadow-md">
+        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <h1 class="text-xl font-bold text-white">Homepage Tool-Box</h1>
+                    </div>
+                    <div class="hidden md:block" id="desktop-menu">
+                        <div class="ml-10 flex items-center space-x-4">
+                            {% if any_source_configured %}
+                            <a href="/" class="nav-link">Media Manager</a>
+                            {% endif %}
+                            {% if enable_config_editor %}
+                            <a href="/editor" class="nav-link">Config Editor</a>
+                            {% endif %}
+                            <a href="/editor/css-gui" class="nav-link">CSS GUI</a>
+                            {% if any_source_configured %}
+                            <a href="/editor/mappings" class="nav-link active">Mappings</a>
+                            {% if enable_debug %}
+                            <a href="/editor/debug-raw" class="nav-link">Raw Data</a>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="hidden md:flex items-center space-x-4">
+                    <button id="reset-button" class="btn btn-secondary font-bold py-2 px-4 rounded text-sm">Reset to Defaults</button>
+                    <button id="save-button" class="btn btn-primary font-bold py-2 px-4 rounded text-sm">Save Mappings</button>
+                </div>
+                <div class="-mr-2 flex md:hidden">
+                    <!-- Mobile menu button -->
+                    <button type="button" id="mobile-menu-button" class="bg-gray-800 inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white" aria-controls="mobile-menu" aria-expanded="false">
+                        <span class="sr-only">Open main menu</span>
+                        <svg class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                        <svg class="hidden h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
             </div>
-        </div>
+            <!-- Mobile menu, show/hide based on menu state. -->
+            <div class="md:hidden hidden" id="mobile-menu">
+                <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                    {% if any_source_configured %}
+                    <a href="/" class="nav-link block">Media Manager</a>
+                    {% endif %}
+                    {% if enable_config_editor %}
+                    <a href="/editor" class="nav-link block">Config Editor</a>
+                    {% endif %}
+                    <a href="/editor/css-gui" class="nav-link block">CSS GUI</a>
+                    {% if any_source_configured %}
+                    <a href="/editor/mappings" class="nav-link active block">Mappings</a>
+                    {% if enable_debug %}
+                    <a href="/editor/debug-raw" class="nav-link block">Raw Data</a>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                <div class="md:hidden pt-4 pb-3 border-t border-gray-700">
+                    <div class="flex items-center justify-center px-5 space-x-4">
+                        <button id="reset-button-mobile" class="btn btn-secondary font-bold py-2 px-4 rounded text-sm w-full">Reset</button>
+                        <button id="save-button-mobile" class="btn btn-primary font-bold py-2 px-4 rounded text-sm w-full">Save</button>
+                    </div>
+                </div>
+            </div>
+        </nav>
     </header>
 
     <main class="flex-grow flex flex-col md:flex-row overflow-hidden p-4 gap-4">
         <!-- Left Navigation Panel -->
         <div class="w-full md:w-1/4 flex-shrink-0">
             <div id="navigation-panel" class="card p-4 rounded-lg shadow-lg h-full overflow-y-auto">
-                <!-- Navigation links will be injected here -->
+                <h2 class="text-xl font-bold mb-2 text-gray-300">Mappings</h2>
+                <div id="mappings-nav-links" class="space-y-4"></div>
+                <hr class="border-gray-600 my-4">
+                <a href="#" id="yaml-generator-link" class="nav-link block p-2 rounded hover:bg-gray-600 font-bold">YAML Generator</a>
             </div>
         </div>
 
@@ -57,12 +134,13 @@
             <div id="editor-panel" class="card p-6 rounded-lg shadow-lg flex-grow overflow-y-auto">
                 <!-- Editor for the selected mapping will be injected here -->
                 <div class="text-center text-gray-400">
-                    <p class="text-xl">Select a mapping from the left to begin editing.</p>
+                    <p class="text-xl mb-4">Select a mapping from the left to begin editing.</p>
+                    <p class="text-lg">Once you have all your mappings configured, check out the <strong class="text-blue-400">YAML Generator</strong> at the bottom left to create your homepage widgets.</p>
                 </div>
             </div>
-            <div class="mt-8 flex justify-end space-x-4">
-                <button id="reset-button" class="btn btn-secondary font-bold py-2 px-4 rounded">Reset to Defaults</button>
-                <button id="save-button" class="btn btn-primary font-bold py-2 px-4 rounded">Save Mappings</button>
+            <div id="generator-panel" class="card p-6 rounded-lg shadow-lg flex-grow overflow-y-auto hidden">
+                <!-- YAML Generator will be injected here -->
+                </div>
             </div>
         </div>
     </main>
@@ -73,8 +151,12 @@
         document.addEventListener('DOMContentLoaded', () => {
             const navigationPanel = document.getElementById('navigation-panel');
             const editorPanel = document.getElementById('editor-panel');
+            const generatorPanel = document.getElementById('generator-panel');
+            const yamlGeneratorLink = document.getElementById('yaml-generator-link');
             const saveButton = document.getElementById('save-button');
             const resetButton = document.getElementById('reset-button');
+            const saveButtonMobile = document.getElementById('save-button-mobile');
+            const resetButtonMobile = document.getElementById('reset-button-mobile');
             const notification = document.getElementById('notification');
             let currentMappings = {}; // Store the loaded mappings in memory
             let lastFocusedInput = null; // Track the last focused input field
@@ -86,40 +168,60 @@
             };
 
             const buildNavigation = (mappings) => {
-                let navHtml = '<div class="space-y-4">';
-                for (const [source, types] of Object.entries(mappings)) {
+                let navHtml = '';
+                for (const [source, groups] of Object.entries(mappings)) {
                     navHtml += `<div>
                                     <h2 class="text-xl font-bold capitalize mb-2 text-gray-300">${source}</h2>
-                                    <ul class="space-y-1">`;
-                    for (const [type, config] of Object.entries(types)) {
-                        // Format the type for display: replace underscores, split camelCase, and capitalize each word.
-                        const typeName = type
-                            .replace(/_/g, ' ') // Replace underscores with spaces
-                            .replace(/([a-z])([A-Z])/g, '$1 $2') // Split camelCase
-                            .split(' ')
-                            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                            .join(' ');
-                        navHtml += `<li>
-                                        <a href="#" class="nav-link block p-2 rounded hover:bg-gray-600" data-source="${source}" data-type="${type}">${typeName}</a>
-                                    </li>`;
+                                    `;
+                    for (const [groupName, types] of Object.entries(groups)) {
+                        const groupTitle = groupName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        navHtml += `<div class="ml-2 mb-3">
+                                        <h3 class="text-lg font-semibold text-gray-400 mb-1">${groupTitle}</h3>
+                                        <ul class="space-y-1">`;
+                        for (const [type, config] of Object.entries(types)) {
+                            // Format the type for display, with special handling for 'activity'
+                            let displayName = type;
+                            if (displayName.startsWith('activity_')) {
+                                displayName = displayName.replace('activity_', 'currently_watching_');
+                            }
+
+                            const typeName = displayName
+                                .replace(/_/g, ' ')
+                                .replace(/([a-z])([A-Z])/g, '$1 $2')
+                                .split(' ')
+                                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                .join(' ');
+
+                            navHtml += `<li>
+                                            <a href="#" class="nav-link block p-2 rounded hover:bg-gray-600" data-source="${source}" data-group="${groupName}" data-type="${type}">${typeName}</a>
+                                        </li>`;
+                        }
+                        navHtml += `</ul>
+                                    </div>`;
                     }
-                    navHtml += `</ul></div>`;
+                    navHtml += `</div>`;
                 }
-                navHtml += '</div>';
-                navigationPanel.innerHTML = navHtml;
+                document.getElementById('mappings-nav-links').innerHTML = navHtml;
             };
 
-            const buildEditorPanel = (source, type, config) => {
+            const buildEditorPanel = (source, group, type, config) => {
                 // First, save any pending changes from the currently displayed editor
                 updateMappingsFromUI();
 
                 const fieldsHtml = config.fields.map(field =>
                     `<span class="field-tag inline-block rounded-full px-3 py-1 text-sm font-semibold mr-2 mb-2" data-field="${field}">{${field}}</span>`
                 ).join('');
+                
+                const groupTitle = group.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                let editorTitle = type;
+                if (editorTitle.startsWith('activity_')) {
+                    editorTitle = editorTitle.replace('activity_', 'currently_watching_');
+                }
+                const formattedTitle = editorTitle.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim();
 
-                let editorHtml = `<div class="mapping-item" data-source="${source}" data-type="${type}">
-                                    <h3 class="text-xl font-semibold capitalize mb-4">${type.replace(/([A-Z])/g, ' $1').trim()}</h3>`;
-
+                let editorHtml = `<div class="mapping-item" data-source="${source}" data-group="${group}" data-type="${type}">
+                                    <h3 class="text-xl font-semibold capitalize mb-4">${formattedTitle}</h3>`;
+                
                 if (config.templates && typeof config.templates === 'object') {
                     for (const [templateKey, templateValue] of Object.entries(config.templates)) {
                         editorHtml += `<div class="mb-4">
@@ -164,15 +266,18 @@
                         if (!mergedMappings[source]) {
                             mergedMappings[source] = {};
                         }
-                        for (const type in savedMappings[source]) {
-                            if (!mergedMappings[source][type]) {
-                                mergedMappings[source][type] = {};
-                            }
-                            // Merge the properties of the type (template, templates, fields)
-                            Object.assign(mergedMappings[source][type], savedMappings[source][type]);
-                            // If the saved mapping has a 'templates' object, ensure it's fully merged
-                            if (savedMappings[source][type].templates && mergedMappings[source][type].templates) {
-                                Object.assign(mergedMappings[source][type].templates, savedMappings[source][type].templates);
+                        for (const groupOrType in savedMappings[source]) {
+                            // Check if the item from saved mappings is a group in the default structure
+                            if (defaultMappings[source] && defaultMappings[source][groupOrType]) {
+                                // It's a group, so merge its types
+                                for (const type in savedMappings[source][groupOrType]) {
+                                    if (mergedMappings[source][groupOrType] && mergedMappings[source][groupOrType][type]) {
+                                        Object.assign(mergedMappings[source][groupOrType][type], savedMappings[source][groupOrType][type]);
+                                        if (savedMappings[source][groupOrType][type].templates && mergedMappings[source][groupOrType][type].templates) {
+                                            Object.assign(mergedMappings[source][groupOrType][type].templates, savedMappings[source][groupOrType][type].templates);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -196,16 +301,17 @@
 
                 const source = activeItem.dataset.source;
                 const type = activeItem.dataset.type;
+                const group = activeItem.dataset.group;
 
-                if (currentMappings[source] && currentMappings[source][type]) {
+                if (currentMappings[source] && currentMappings[source][group] && currentMappings[source][group][type]) {
                     const templateInputs = activeItem.querySelectorAll('.template-input');
                     if (templateInputs.length > 1 || (templateInputs.length === 1 && templateInputs[0].dataset.templateKey)) {
                         templateInputs.forEach(input => {
                             const key = input.dataset.templateKey;
-                            currentMappings[source][type].templates[key] = input.value;
+                            currentMappings[source][group][type].templates[key] = input.value;
                         });
                     } else if (templateInputs.length === 1) {
-                        currentMappings[source][type].template = templateInputs[0].value;
+                        currentMappings[source][group][type].template = templateInputs[0].value;
                     }
                 }
             };
@@ -214,30 +320,22 @@
                 updateMappingsFromUI(); // Ensure the currently displayed editor's values are saved
                 const updatedMappings = JSON.parse(JSON.stringify(currentMappings)); // Return a clean copy
 
-                // This part is now simplified as we update the 'currentMappings' object directly.
-                // The original logic iterated the whole DOM, which is no longer necessary.
-                // We just need to ensure the final state of the in-memory object is correct.
-                Object.keys(updatedMappings).forEach(source => {
-                    Object.keys(updatedMappings[source]).forEach(type => {
-                        // Ensure 'fields' are not saved in the final output, as they are for UI only.
-                        // A better approach is to construct the payload from scratch, but for now this is fine.
-                        // Let's rebuild the object to be safe.
-                    });
-                });
-
                 // Rebuild the object to be saved, excluding the 'fields' property.
                 const mappingsToSave = {};
                 for (const source in currentMappings) {
                     mappingsToSave[source] = {};
-                    for (const type in currentMappings[source]) {
-                        const { fields, ...configToSave } = currentMappings[source][type];
-                        mappingsToSave[source][type] = configToSave;
+                    for (const group in currentMappings[source]) {
+                        mappingsToSave[source][group] = {};
+                        for (const type in currentMappings[source][group]) {
+                            const { fields, ...configToSave } = currentMappings[source][group][type];
+                            mappingsToSave[source][group][type] = configToSave;
+                        }
                     }
                 }
                 return mappingsToSave;
             };
 
-            saveButton.addEventListener('click', async () => {
+            const handleSave = async () => {
                 const mappingsToSave = collectAllMappings();
                 try {
                     const response = await fetch('/editor/api/mappings', {
@@ -254,29 +352,337 @@
                 } catch (e) {
                     showNotification('Error saving mappings.', true);
                 }
-            });
+            };
 
-            resetButton.addEventListener('click', () => {
+            const handleReset = () => {
                 if (confirm('Are you sure you want to reset all mappings to their default values? This will not save until you click "Save Mappings".')) {
                     loadMappings(true);
                 }
-            });
+            };
+
+            saveButton.addEventListener('click', handleSave);
+            resetButton.addEventListener('click', handleReset);
+            saveButtonMobile.addEventListener('click', handleSave);
+            resetButtonMobile.addEventListener('click', handleReset);
 
             navigationPanel.addEventListener('click', (e) => {
-                if (e.target.classList.contains('nav-link')) {
+                if (e.target.classList.contains('nav-link') && e.target.dataset.source) {
                     e.preventDefault();
                     const source = e.target.dataset.source;
+                    const group = e.target.dataset.group;
                     const type = e.target.dataset.type;
                     
+                    // Show the editor and hide the generator
+                    generatorPanel.classList.add('hidden');
+                    editorPanel.classList.remove('hidden');
+                    document.querySelectorAll('#save-button, #reset-button, #save-button-mobile, #reset-button-mobile').forEach(btn => btn.classList.remove('hidden'));
+
                     // Highlight active link
                     navigationPanel.querySelectorAll('.nav-link').forEach(link => link.classList.remove('bg-blue-600', 'text-white'));
                     e.target.classList.add('bg-blue-600', 'text-white');
 
-                    if (currentMappings[source] && currentMappings[source][type]) {
-                        buildEditorPanel(source, type, currentMappings[source][type]);
+                    if (currentMappings[source] && currentMappings[source][group] && currentMappings[source][group][type]) {
+                        buildEditorPanel(source, group, type, currentMappings[source][group][type]);
                     }
                 }
             });
+
+            // --- YAML Generator Logic ---
+            const buildGeneratorPanel = async () => {
+                const hostInfoRes = await fetch('/api/host-info');
+                const hostInfo = await hostInfoRes.json();
+                const port = hostInfo.port || '5000';
+
+                generatorPanel.innerHTML = `
+                    <h2 class="text-2xl font-bold mb-4">Homepage YAML Generator</h2>
+                    <div class="space-y-6">
+                        <div>
+                            <label for="generator-ip" class="block font-semibold mb-2">Media Manager Host IP & Port:</label>
+                            <input type="text" id="generator-ip" class="w-full md:w-1/2 p-2 rounded font-mono" placeholder="e.g., 192.168.1.10:${port}">
+                        </div>
+                        <div>
+                            <label for="generator-source" class="block font-semibold mb-2">Data Source:</label>
+                            <select id="generator-source" class="w-full md:w-1/2 p-2 rounded"></select>
+                        </div>
+                        <div id="generator-type-container" class="hidden">
+                            <label for="generator-type" class="block font-semibold mb-2">Generator Type:</label>
+                            <select id="generator-type" class="w-full md:w-1/2 p-2 rounded">
+                                <option value="">-- Select Type --</option>
+                                <option value="recently-added">Recently Added</option>
+                                <option value="user-activity">User Activity</option>
+                            </select>
+                        </div>
+                        <div id="generator-options-container" class="space-y-4"></div>
+                        <button id="generate-yaml-button" class="btn btn-primary font-bold py-2 px-4 rounded">Generate YAML</button>
+                        <div id="yaml-output-container" class="hidden mt-4">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-semibold">Generated YAML</h3>
+                                <button id="copy-yaml-button" class="btn btn-secondary text-sm py-1 px-3 rounded">Copy</button>
+                            </div>
+                            <pre class="p-4 rounded-lg text-sm overflow-x-auto" style="background-color: #4a5568;"><code id="yaml-output"></code></pre>
+                        </div>
+                    </div>
+                `;
+
+                const sourceSelector = document.getElementById('generator-source');
+                const typeContainer = document.getElementById('generator-type-container');
+                const optionsContainer = document.getElementById('generator-options-container');
+                const generateBtn = document.getElementById('generate-yaml-button');
+                const outputContainer = document.getElementById('yaml-output-container');
+                const outputCode = document.getElementById('yaml-output');
+                const copyBtn = document.getElementById('copy-yaml-button');
+
+                // Populate sources
+                const sourcesRes = await fetch('/api/main-sources');
+                const sources = await sourcesRes.json();
+                sourceSelector.innerHTML = '<option value="">-- Select Source --</option>' + sources.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+                const buildRecentlyAddedOptions = async (source) => {
+                    optionsContainer.innerHTML = '<p>Loading libraries...</p>';
+                    const libsRes = await fetch(`/api/${source}/libraries`);
+                    const libraries = await libsRes.json();
+                    
+                    const libraryTypes = { movie: [], show: [], artist: [], book: [] };
+                    libraries.forEach(lib => {
+                        const type = lib.section_type || (lib.counts.Books ? 'book' : null);
+                        if (type === 'movie') libraryTypes.movie.push(lib);
+                        else if (type === 'show') libraryTypes.show.push(lib);
+                        else if (type === 'artist') libraryTypes.artist.push(lib);
+                        else if (type === 'book') libraryTypes.book.push(lib);
+                    });
+
+                    let html = `
+                        <div class="mb-4">
+                            <label for="generator-date-format" class="block font-semibold mb-2">Date Format:</label>
+                            <select id="generator-date-format" class="w-full md:w-1/2 p-2 rounded">
+                                <option value="short" selected>Short (e.g., Sep 28)</option>
+                                <option value="relative">Relative (e.g., 2 days ago)</option>
+                            </select>
+                        </div>`;
+                    Object.entries(libraryTypes).forEach(([type, libs]) => {
+                        if (libs.length > 0) {
+                            html += `<div class="p-4 rounded-lg" style="background-color: #4a5568;">
+                                <h4 class="text-lg font-bold capitalize mb-2">${type} Libraries</h4>`;
+                            libs.forEach(lib => {
+                                html += `<div class="flex items-center justify-between py-1" data-library-name="${lib.section_name}" data-library-type="${type}">
+                                    <span>${lib.section_name}</span>
+                                    <div class="flex items-center space-x-4">
+                                        <label class="flex items-center"><input type="checkbox" class="generator-include mr-2"> Include</label>
+                                        <label class="flex items-center"><input type="checkbox" class="generator-counts mr-2"> Counts</label>
+                                        <label class="flex items-center">Limit: <input type="number" value="5" min="1" max="15" class="generator-limit w-16 ml-2 p-1 rounded text-center"></label>
+                                    </div>
+                                </div>`;
+                            });
+                            html += `</div>`;
+                        }
+                    });
+                    optionsContainer.innerHTML = html;
+                };
+
+                sourceSelector.addEventListener('change', async () => {
+                    const source = sourceSelector.value;
+                    optionsContainer.innerHTML = '';
+                    document.getElementById('generator-type').value = '';
+                    if (!source) {
+                        typeContainer.classList.add('hidden');
+                        return;
+                    }
+
+                    if (source === 'audiobookshelf') {
+                        typeContainer.classList.add('hidden');
+                        await buildRecentlyAddedOptions(source);
+                    } else {
+                        typeContainer.classList.remove('hidden');
+                    }
+                });
+
+                document.getElementById('generator-type').addEventListener('change', async (e) => {
+                    const generatorType = e.target.value;
+                    const source = sourceSelector.value;
+                    optionsContainer.innerHTML = '<p>Loading...</p>';
+
+                    if (!generatorType) {
+                        optionsContainer.innerHTML = '';
+                        return;
+                    }
+
+                    if (generatorType === 'recently-added') {
+                        await buildRecentlyAddedOptions(source);
+                    } else if (generatorType === 'user-activity') {
+                        if (source === 'tautulli' || source === 'jellystat') {
+                            optionsContainer.innerHTML = `<div class="p-4 rounded-lg" style="background-color: #4a5568;">
+                                <h4 class="text-lg font-bold capitalize mb-2">Activity Widget</h4>
+                                <div class="flex items-center justify-between py-1" data-activity-widget>
+                                    <span>User Activity</span>
+                                    <div class="flex items-center space-x-4">
+                                        <label class="flex items-center"><input type="checkbox" class="generator-include-activity mr-2"> Include</label>
+                                        <label class="flex items-center">Limit: <input type="number" value="5" min="1" max="25" class="generator-limit-activity w-16 ml-2 p-1 rounded text-center"></label>
+                                    </div>
+                                </div>
+                            </div>`;
+                        } else {
+                            optionsContainer.innerHTML = '<p class="text-yellow-400">User Activity widget is not available for this source.</p>';
+                        }
+                    }
+                });
+
+                generateBtn.addEventListener('click', () => {
+                    const host = document.getElementById('generator-ip').value;
+                    if (!host) {
+                        showNotification('Please enter the Media Manager Host IP & Port.', true);
+                        return;
+                    }
+                    const source = sourceSelector.value;
+                    let recentlyAddedYamlBody = '';
+                    let activityYaml = '';
+                    let hasRecentlyAddedContent = false;
+
+                    // Process Library Widgets
+                    document.querySelectorAll('#generator-options-container [data-library-name]').forEach(libRow => {
+                        const include = libRow.querySelector('.generator-include').checked;
+                        if (!include) return;
+
+                        const libName = libRow.dataset.libraryName;
+                        const libType = libRow.dataset.libraryType;
+                        const withCounts = libRow.querySelector('.generator-counts').checked;
+                        const limit = libRow.querySelector('.generator-limit').value;
+                        
+                        hasRecentlyAddedContent = true;
+                        let icon;
+                        if (source === 'tautulli') {
+                            icon = 'tautulli.png';
+                        } else if (source === 'jellystat') {
+                            icon = 'jellystat.png';
+                        } else if (source === 'audiobookshelf') {
+                            icon = 'audiobookshelf.png';
+                        } else {
+                            icon = 'plex.png'; // Fallback icon
+                        }
+
+                        const dateFormatSelector = document.getElementById('generator-date-format');
+                        const dateFormat = dateFormatSelector ? dateFormatSelector.value : 'short';
+                        const dateFormatParam = dateFormat ? `&dateFormat=${dateFormat}` : '';
+
+                        let addedWidget = `
+          - type: customapi
+            url: http://${host}/api/added?source=${source}${dateFormatParam}
+            display: dynamic-list
+            mappings:
+              items: ${libName}.items
+              name: title
+              label: added_at
+              limit: ${limit}`;
+
+                        let countsWidget = '';
+                        if (withCounts) {
+                            let countMappings = '';
+                            if (libType === 'movie') {
+                                countMappings = `
+            - field:
+                ${libName}:
+                  counts: Movies
+              format: numbers
+              label: Movies`;
+                                } else if (libType === 'show') {
+                                    countMappings = `
+            - field:
+                ${libName}:
+                  counts: Shows
+              format: numbers
+              label: Shows
+            - field:
+                ${libName}:
+                  counts: Seasons
+              format: numbers
+              label: Seasons
+            - field:
+                ${libName}:
+                  counts: Episodes
+              format: numbers
+              label: Episodes`;
+                                } else if (libType === 'artist') {
+                                    countMappings = `
+            - field:
+                ${libName}:
+                  counts: Artists
+              format: numbers
+              label: Artists
+            - field:
+                ${libName}:
+                  counts: Albums
+              format: numbers
+              label: Albums`;
+                                } else if (libType === 'book') {
+                                    countMappings = `
+            - field:
+                ${libName}:
+                  counts: Books
+              format: numbers
+              label: Books
+            - field:
+                ${libName}:
+                  counts: Authors
+              format: numbers
+              label: Authors`;
+                                }
+
+                            countsWidget = `
+          - type: customapi
+            url: http://${host}/api/counts?source=${source}
+            method: GET
+            display: block
+            mappings:${countMappings}`;
+                        }
+
+                        recentlyAddedYamlBody += `
+    - ${libName}:
+        icon: ${icon}
+        widgets:${addedWidget}${countsWidget}
+`;
+                    });
+
+                    // Process Activity Widget
+                    const activityRow = document.querySelector('#generator-options-container [data-activity-widget]');
+                    if (activityRow) {
+                        const includeActivity = activityRow.querySelector('.generator-include-activity').checked;
+                        if (includeActivity) {
+                            const limit = activityRow.querySelector('.generator-limit-activity').value;
+                            activityYaml = `
+- Activity:
+    - Activity:
+        widgets:
+          - type: customapi
+            url: http://${host}/api/activity?source=${source}
+            display: dynamic-list
+            mappings:
+              items:
+              name: user
+              label: title
+              limit: ${limit}
+`;
+                        }
+                    }
+                    
+                    let finalYaml = '';
+                    if (hasRecentlyAddedContent) {
+                        finalYaml += `- Recently Added:${recentlyAddedYamlBody}`;
+                    }
+                    finalYaml += activityYaml;
+
+                    if (finalYaml) {
+                        outputCode.textContent = finalYaml.trim();
+                        outputContainer.classList.remove('hidden');
+                    }
+                });
+
+                copyBtn.addEventListener('click', () => {
+                    navigator.clipboard.writeText(outputCode.textContent).then(() => {
+                        showNotification('Copied to clipboard!');
+                    }, () => {
+                        showNotification('Failed to copy.', true);
+                    });
+                });
+            };
 
             editorPanel.addEventListener('click', (e) => {
                 if (e.target.classList.contains('field-tag')) {
@@ -319,8 +725,32 @@
                 }
             });
 
+            yamlGeneratorLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                editorPanel.classList.add('hidden');
+                document.querySelectorAll('#save-button, #reset-button, #save-button-mobile, #reset-button-mobile').forEach(btn => btn.classList.add('hidden'));
+                generatorPanel.classList.remove('hidden');
+                buildGeneratorPanel();
+
+                // Update active link
+                navigationPanel.querySelectorAll('.nav-link').forEach(link => link.classList.remove('bg-blue-600', 'text-white'));
+                yamlGeneratorLink.classList.add('bg-blue-600', 'text-white');
+            });
+
+
             // Initial load
             loadMappings();
+
+            // Mobile menu toggle
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            const svgs = mobileMenuButton.querySelectorAll('svg');
+
+            mobileMenuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+                svgs[0].classList.toggle('hidden');
+                svgs[1].classList.toggle('hidden');
+            });
         });
     </script>
 </body>
