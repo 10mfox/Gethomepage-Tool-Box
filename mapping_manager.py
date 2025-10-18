@@ -22,110 +22,110 @@ def get_default_mappings():
     """
     return {
         'tautulli': {
-            'movie': {
-                'template': '{title}',
-                'fields': ['title', 'year', 'originally_available_at', 'media_type', 'grandparent_title', 'parent_title']
-            },
-            'episode': {
-                'template': '{grandparent_title} - S{parent_media_index}E{media_index} - {title}',
-                'fields': ['title', 'year', 'originally_available_at', 'media_type', 'grandparent_title', 'parent_title', 'parent_media_index', 'media_index']
-            },
-            'album': {
-                'template': '{parent_title} - {title}',
-                'fields': ['title', 'year', 'originally_available_at', 'media_type', 'parent_title']
-            },
-            'activity_episode': {
-                'templates': {
-                    'title': '{grandparent_title} - S{parent_media_index}E{media_index} {view_offset_hhmmss} / {duration_hhmmss}',
-                    'user': '{user} ({status}) {status_dot}'
+            'recently_added': {
+                'movie': {
+                    'template': '{title}',
+                    'fields': ['title', 'year', 'originally_available_at', 'media_type', 'grandparent_title', 'parent_title']
                 },
-                'fields': ['user', 'friendly_name', 'title', 'grandparent_title', 'parent_title', 'state', 'platform', 'device', 'player', 'progress_percent', 'status', 'view_offset_hhmmss', 'duration_hhmmss', 'status_dot']
-            },
-            'activity_movie': {
-                'templates': {
-                    'title': '{title} {view_offset_hhmmss} / {duration_hhmmss}',
-                    'user': '{user} ({status}) {status_dot}'
+                'episode': {
+                    'template': '{grandparent_title} - S{parent_media_index}E{media_index} - {title}',
+                    'fields': ['title', 'year', 'originally_available_at', 'media_type', 'grandparent_title', 'parent_title', 'parent_media_index', 'media_index']
                 },
-                'fields': ['user', 'friendly_name', 'title', 'year', 'state', 'platform', 'device', 'player', 'progress_percent', 'status', 'view_offset_hhmmss', 'duration_hhmmss', 'status_dot']
+                'album': {
+                    'template': '{parent_title} - {title}',
+                    'fields': ['title', 'year', 'originally_available_at', 'media_type', 'parent_title']
+                }
             },
-            'last_played_activity_episode': {
-                'templates': {
-                    'title': '{grandparent_title} - S{parent_media_index}E{media_index} - {title}',
-                    'user': '{user} ({status}) {status_dot}'
+            'user_activity': {
+                'activity_episode': {
+                    'templates': {
+                        'title': '{grandparent_title} - S{parent_media_index}E{media_index} {view_offset_hhmmss} / {duration_hhmmss}',
+                        'user': '{user} ({status}) {status_dot}'
+                    },
+                    'fields': ['user', 'friendly_name', 'title', 'grandparent_title', 'parent_title', 'state', 'platform', 'device', 'player', 'progress_percent', 'status', 'view_offset_hhmmss', 'duration_hhmmss', 'status_dot']
                 },
-                'fields': ['user', 'friendly_name', 'title', 'grandparent_title', 'parent_title', 'stopped', 'stopped_formatted', 'platform', 'device', 'player', 'status', 'status_dot']
-            },
-            'last_played_activity_movie': {
-                'templates': {
-                    'title': '{title} ({year})',
-                    'user': '{user} ({status}) {status_dot}'
+                'activity_movie': {
+                    'templates': {
+                        'title': '{title} {view_offset_hhmmss} / {duration_hhmmss}',
+                        'user': '{user} ({status}) {status_dot}'
+                    },
+                    'fields': ['user', 'friendly_name', 'title', 'year', 'state', 'platform', 'device', 'player', 'progress_percent', 'status', 'view_offset_hhmmss', 'duration_hhmmss', 'status_dot']
                 },
-                'fields': ['user', 'friendly_name', 'title', 'year', 'stopped', 'stopped_formatted', 'platform', 'device', 'player', 'status', 'status_dot']
-            },
-            'last_played_activity_track': {
-                'templates': {
-                    'title': '{grandparent_title} - {title}',
-                    'user': '{user} ({status}) {status_dot}'
+                'last_played_episode': {
+                    'templates': {
+                        'title': '{grandparent_title} - S{parent_media_index}E{media_index} - {title}',
+                        'user': '{user} ({status}) {status_dot}'
+                    },
+                    'fields': ['user', 'friendly_name', 'title', 'grandparent_title', 'parent_title', 'stopped', 'stopped_formatted', 'platform', 'device', 'player', 'status', 'status_dot']
                 },
-                'fields': ['user', 'friendly_name', 'title', 'grandparent_title', 'parent_title', 'stopped', 'stopped_formatted', 'platform', 'device', 'player', 'status', 'status_dot']
+                'last_played_movie': {
+                    'templates': {
+                        'title': '{title} ({year})',
+                        'user': '{user} ({status}) {status_dot}'
+                    },
+                    'fields': ['user', 'friendly_name', 'title', 'year', 'stopped', 'stopped_formatted', 'platform', 'device', 'player', 'status', 'status_dot']
+                },
+                'last_played_track': {
+                    'templates': {
+                        'title': '{grandparent_title} - {title}',
+                        'user': '{user} ({status}) {status_dot}'
+                    },
+                    'fields': ['user', 'friendly_name', 'title', 'grandparent_title', 'parent_title', 'stopped', 'stopped_formatted', 'platform', 'device', 'player', 'status', 'status_dot']
+                }
             }
         },
         'jellystat': {
-            'Movie': {
-                'template': '{Name}',
-                'fields': ['Name']
-            },
-            'Episode': {
-                'template': '{SeriesName} - S{SeasonNumber}E{EpisodeNumber} - {Name}',
-                'fields': ['Name', 'SeriesName', 'SeasonNumber', 'EpisodeNumber']
-            },
-            'Audio': {
-                'template': '{Name}',
-                'fields': ['Name']
-            },
-            'activity_Episode': {
-                'templates': {
-                    'title': '{SeriesName} - S{ParentIndexNumber}E{IndexNumber} {PositionTicks_hhmmss}/{RunTimeTicks_hhmmss}',
-                    'user': '{UserName} ({status}) {status_dot}'
+            'recently_added': {
+                'Movie': {
+                    'template': '{Name}',
+                    'fields': ['Name']
                 },
-                'fields': [
-                    'UserName', 'Client', 'DeviceName', 'Name', 'SeriesName', 'IsPaused', 'PlayMethod', 'status', 'CompletionPercentage',
-                    'IndexNumber', 'ParentIndexNumber', 'PositionTicks_hhmmss', 'RunTimeTicks_hhmmss', 'LastWatched', 'CommunityRating',
-                    'OfficialRating', 'ProductionYear', 'Container', 'VideoCodec', 'AudioCodec', 'LastClient', 'status_dot'
-                ]
-            },
-            'activity_Movie': {
-                'templates': {
-                    'title': '{Name} ({CompletionPercentage}%) {PositionTicks_hhmmss}/{RunTimeTicks_hhmmss}',
-                    'user': '{UserName} ({status}) {status_dot}'
+                'Episode': {
+                    'template': '{SeriesName} - S{SeasonNumber}E{EpisodeNumber} - {Name}',
+                    'fields': ['Name', 'SeriesName', 'SeasonNumber', 'EpisodeNumber']
                 },
-                'fields': [
-                    'UserName', 'Client', 'DeviceName', 'Name', 'IsPaused', 'PlayMethod', 'status',
-                    'PositionTicks_hhmmss', 'RunTimeTicks_hhmmss', 'CommunityRating', 'OfficialRating',
-                    'ProductionYear', 'Container', 'VideoCodec', 'AudioCodec', 'CompletionPercentage', 'LastClient', 'status_dot'
-                ]
+                'Audio': {
+                    'template': '{Name}',
+                    'fields': ['Name']
+                }
             },
-            'last_played_activity_Episode': {
-                'templates': {
-                    'title': '{LastWatched}',
-                    'user': '{UserName} ({status}) {status_dot}'
+            'user_activity': {
+                'activity_Episode': {
+                    'templates': {
+                        'title': '{SeriesName} - S{ParentIndexNumber}E{IndexNumber} {PositionTicks_hhmmss}/{RunTimeTicks_hhmmss}',
+                        'user': '{UserName} ({status}) {status_dot}'
+                    },
+                    'fields': ['UserName', 'Client', 'DeviceName', 'Name', 'SeriesName', 'IsPaused', 'PlayMethod', 'status', 'CompletionPercentage', 'IndexNumber', 'ParentIndexNumber', 'PositionTicks_hhmmss', 'RunTimeTicks_hhmmss', 'LastWatched', 'CommunityRating', 'OfficialRating', 'ProductionYear', 'Container', 'VideoCodec', 'AudioCodec', 'LastClient', 'status_dot']
                 },
-                'fields': ['UserName', 'LastWatched', 'LastActivityDate', 'LastActivityDate_formatted', 'LastClient', 'TotalPlays', 'TotalWatchTime', 'status', 'status_dot', 'LastActivityDate_formatted']
-            },
-            'last_played_activity_Movie': {
-                'templates': {
-                    'title': '{LastWatched}',
-                    'user': '{UserName} ({status}) {status_dot}'
+                'activity_Movie': {
+                    'templates': {
+                        'title': '{Name} {PositionTicks_hhmmss}/{RunTimeTicks_hhmmss}',
+                        'user': '{UserName} ({status}) {status_dot}'
+                    },
+                    'fields': ['UserName', 'Client', 'DeviceName', 'Name', 'IsPaused', 'PlayMethod', 'status', 'PositionTicks_hhmmss', 'RunTimeTicks_hhmmss', 'CommunityRating', 'OfficialRating', 'ProductionYear', 'Container', 'VideoCodec', 'AudioCodec', 'CompletionPercentage', 'LastClient', 'status_dot']
                 },
-                'fields': [
-                    'UserName', 'LastWatched', 'LastActivityDate', 'LastActivityDate_formatted', 'LastClient', 'TotalPlays', 'TotalWatchTime', 'status', 'status_dot', 'LastActivityDate_formatted'
-                ]
+                'last_played_Episode': {
+                    'templates': {
+                        'title': '{LastWatched}',
+                        'user': '{UserName} ({status}) {status_dot}'
+                    },
+                    'fields': ['UserName', 'LastWatched', 'LastActivityDate', 'LastActivityDate_formatted', 'LastClient', 'TotalPlays', 'TotalWatchTime', 'status', 'status_dot', 'LastActivityDate_formatted']
+                },
+                'last_played_Movie': {
+                    'templates': {
+                        'title': '{LastWatched}',
+                        'user': '{UserName} ({status}) {status_dot}'
+                    },
+                    'fields': ['UserName', 'LastWatched', 'LastActivityDate', 'LastActivityDate_formatted', 'LastClient', 'TotalPlays', 'TotalWatchTime', 'status', 'status_dot', 'LastActivityDate_formatted']
+                }
             }
         },
         'audiobookshelf': {
-            'book': {
-                'template': '{authorName} - {title}',
-                'fields': ['title', 'subtitle', 'authorName', 'narratorName', 'seriesName', 'genre', 'publishedYear', 'publisher', 'description', 'duration', 'numChapters', 'numTracks', 'mediaType', 'path']
+            'recently_added': {
+                'book': {
+                    'template': '{authorName} - {title}',
+                    'fields': ['title', 'subtitle', 'authorName', 'narratorName', 'seriesName', 'genre', 'publishedYear', 'publisher', 'description', 'duration', 'numChapters', 'numTracks', 'mediaType', 'path']
+                }
             }
         }
     }
@@ -193,7 +193,7 @@ def apply_mapping(item_data, source, media_type):
 
     # Find the correct mapping, falling back gracefully
     source_mapping = mappings.get(source, {})
-    type_mapping = source_mapping.get(media_type)
+    type_mapping = source_mapping.get('recently_added', {}).get(media_type)
 
     if not type_mapping:
         # If no specific mapping exists, try to find a default 'title' or 'name' field.
@@ -212,25 +212,25 @@ def apply_activity_mapping(item_data, source='jellystat', sub_type='activity'):
     Applies the mapping specifically for the 'activity' type, which has multiple templates.
     Returns a dictionary of formatted strings.
     """
+    # Map the old sub_type to the new structure keys
+    activity_type = 'last_played' if 'last_played' in sub_type else 'activity'
+
     # Determine the specific sub-type based on the media type
     media_type = item_data.get('media_type') or item_data.get('Type')
     
     # For Jellystat history, the 'Type' field is missing. We can infer the type.
-    # If 'SeriesName' exists, it's an episode. Otherwise, it's likely a movie.
     if source == 'jellystat' and not media_type:
         media_type = 'Episode' if item_data.get('SeriesName') else 'Movie'
     media_type = media_type or '' # Ensure media_type is a string
     
-    if 'movie' in media_type.lower():
-        sub_type = f"{sub_type}_movie" if source == 'tautulli' else f"{sub_type}_Movie"
-    elif 'episode' in media_type.lower():
-        sub_type = f"{sub_type}_episode" if source == 'tautulli' else f"{sub_type}_Episode"
-    elif 'track' in media_type.lower() and source == 'tautulli':
-        sub_type = f"{sub_type}_track"
-    # If it's neither, it will just use the base 'activity' or 'last_played_activity' which might not exist, leading to fallback.
+    # Normalize media type for lookup
+    if 'movie' in media_type.lower(): media_type_key = 'movie' if source == 'tautulli' else 'Movie'
+    elif 'episode' in media_type.lower(): media_type_key = 'episode' if source == 'tautulli' else 'Episode'
+    elif 'track' in media_type.lower() and source == 'tautulli': media_type_key = 'track'
+    else: media_type_key = media_type # Fallback for other types
 
     mappings = get_mappings()
-    type_mapping = mappings.get(source, {}).get(sub_type)
+    type_mapping = mappings.get(source, {}).get(activity_type, {}).get(media_type_key)
 
     if not type_mapping or 'templates' not in type_mapping:
         # Fallback for when mappings are not found. Check for both Jellystat and Tautulli style fields.

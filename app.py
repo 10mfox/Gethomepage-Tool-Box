@@ -17,23 +17,10 @@ swagger_template = {
     "swagger": "2.0",
     "info": {
         "title": "Media Manager & Homepage Tool-Box API",
+        "title": "Gethomepage Tool-Box API Docs",
         "description": "API for fetching media server data and managing configurations.",
         "version": os.environ.get('VERSION', 'dev')
     },
-    "tags": [
-        {
-            "name": "Data",
-            "description": "Endpoints for fetching processed data from media servers."
-        },
-        {
-            "name": "Editor",
-            "description": "Endpoints for the configuration file editor."
-        },
-        {
-            "name": "Mappings",
-            "description": "Endpoints for managing title-formatting mappings."
-        }
-    ],
     "definitions": {
         "Library": {
             "type": "object",
@@ -61,10 +48,20 @@ swagger_template = {
         }
     }
 }
-swagger = Swagger(app, template=swagger_template)
 
-# --- Editor Blueprint ---
-from editor import editor_bp
+# Dynamically build swagger tags based on configured sources
+swagger_tags = [
+    {"name": "Data", "description": "Endpoints for fetching processed data from media servers."},
+    {"name": "Editor", "description": "Endpoints for the configuration file editor."},
+    {"name": "Mappings", "description": "Endpoints for managing title-formatting mappings."}
+]
+
+if os.environ.get('ENABLE_DEBUG', 'false').lower() == 'true':
+    swagger_tags.append({"name": "Debug", "description": "Endpoints for debugging and viewing raw data."})
+
+swagger_template['tags'] = swagger_tags
+
+swagger = Swagger(app, template=swagger_template)
 
 # --- Debug Blueprint ---
 debug_bp = Blueprint('debug', __name__)
@@ -80,6 +77,35 @@ AUDIOBOOKSHELF_URL = os.environ.get('AUDIOBOOKSHELF_URL')
 AUDIOBOOKSHELF_API_KEY = os.environ.get('AUDIOBOOKSHELF_API_KEY')
 POLL_INTERVAL_SECONDS = int(os.environ.get('POLL_INTERVAL', 15))
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', 30))
+ENABLE_CONFIG_EDITOR = os.environ.get('ENABLE_CONFIG_EDITOR', 'false').lower() == 'true'
+ENABLE_DEBUG = os.environ.get('ENABLE_DEBUG', 'false').lower() == 'true'
+
+# --- Global Source Configuration Check ---
+any_source_configured = (
+    (TAUTULLI_URL and TAUTULLI_API_KEY) or
+    (JELLYSTAT_URL and JELLYSTAT_API_KEY) or
+    (AUDIOBOOKSHELF_URL and AUDIOBOOKSHELF_API_KEY)
+)
+
+# --- Dynamic Source Lists for Swagger ---
+configured_main_sources_list = []
+if TAUTULLI_URL and TAUTULLI_API_KEY:
+    configured_main_sources_list.append('tautulli')
+if JELLYSTAT_URL and JELLYSTAT_API_KEY:
+    configured_main_sources_list.append('jellystat')
+if AUDIOBOOKSHELF_URL and AUDIOBOOKSHELF_API_KEY:
+    configured_main_sources_list.append('audiobookshelf')
+
+configured_activity_sources_list = []
+if TAUTULLI_URL and TAUTULLI_API_KEY:
+    configured_activity_sources_list.append('tautulli')
+if JELLYSTAT_URL and JELLYSTAT_API_KEY:
+    configured_activity_sources_list.append('jellystat')
+
+configured_debug_sources_list = configured_main_sources_list[:]
+if TAUTULLI_URL and TAUTULLI_API_KEY and ENABLE_DEBUG: configured_debug_sources_list.append('tautulli-activity')
+if JELLYSTAT_URL and JELLYSTAT_API_KEY and ENABLE_DEBUG:
+    configured_debug_sources_list.extend(['jellystat-activity', 'jellystat-history'])
 
 log = logging.getLogger(__name__)
 
@@ -203,7 +229,10 @@ def _get_date_format_from_request():
 # --- Flask Routes ---
 @app.route('/')
 def index():
-    return render_template('index.html')
+    if not any_source_configured:
+        homepage_url = os.environ.get('HOMEPAGE_PREVIEW_URL', '')
+        return render_template('css-gui.html', homepage_preview_url=homepage_url, any_source_configured=any_source_configured, enable_config_editor=ENABLE_CONFIG_EDITOR, enable_debug=ENABLE_DEBUG)
+    return render_template('index.html', any_source_configured=any_source_configured, enable_config_editor=ENABLE_CONFIG_EDITOR, enable_debug=ENABLE_DEBUG)
 
 @app.route('/api/version')
 def get_version():
@@ -277,16 +306,37 @@ def get_sources():
     sources = []
     if TAUTULLI_URL and TAUTULLI_API_KEY:
         sources.append({"id": "tautulli", "name": "Tautulli"})
+        if ENABLE_DEBUG:
+            sources.append({"id": "tautulli-activity", "name": "Tautulli (Activity)"})
     if JELLYSTAT_URL and JELLYSTAT_API_KEY:
         sources.append({"id": "jellystat", "name": "Jellystat"})
-        # Add a special source for the raw data viewer to target the activity endpoint
-        sources.append({"id": "jellystat-activity", "name": "Jellystat (Activity)"})
-        sources.append({"id": "jellystat-history", "name": "Jellystat (History)"})
-        sources.append({"id": "tautulli-activity", "name": "Tautulli (Activity)"})
+        if ENABLE_DEBUG:
+            sources.append({"id": "jellystat-activity", "name": "Jellystat (Activity)"})
+            sources.append({"id": "jellystat-history", "name": "Jellystat (History)"})
 
     if AUDIOBOOKSHELF_URL and AUDIOBOOKSHELF_API_KEY:
         sources.append({"id": "audiobookshelf", "name": "Audiobookshelf"})
     return jsonify(sources)
+
+@app.route('/api/host-info', methods=['GET'])
+def get_host_info():
+    """
+    Get Host Information
+    ---
+    description: Returns information about the host, such as the port the app is running on.
+    responses:
+      200:
+        description: Host information.
+        schema:
+          type: object
+          properties:
+            port:
+              type: string
+              example: '5000'
+    """
+    # This relies on the fact that Gunicorn binds to 0.0.0.0:port inside the container.
+    port = os.environ.get('GUNICORN_CMD_ARGS', '--bind=0.0.0.0:5000').split(':')[-1]
+    return jsonify({"port": port})
 
 # --- Library Endpoints ---
 @app.route('/api/tautulli/libraries', methods=['GET'])
@@ -379,23 +429,29 @@ def get_jellystat_libraries():
         # 4. Combine the data into the format the frontend expects, including detailed counts.
         formatted_libs = []
         for lib in libraries:
+            section_type = None
             counts = {}
             stat_details = next((s for s in stats if s['Id'] == lib.get('Id')), None)
             collection_type = stat_details.get('CollectionType') if stat_details else None
 
             if collection_type == 'tvshows':
+                section_type = 'show'
                 counts['Shows'] = stat_details.get('Library_Count')
                 counts['Seasons'] = stat_details.get('Season_Count')
                 counts['Episodes'] = stat_details.get('Episode_Count')
             elif collection_type == 'movies':
+                section_type = 'movie'
                 counts['Movies'] = stat_details.get('Library_Count')
             elif collection_type == 'music':
+                section_type = 'artist'
                 # Jellystat's Library_Count for music appears to be the track count.
                 counts['Tracks'] = stat_details.get('Library_Count')
+
             formatted_libs.append({
                 "section_id": lib.get("Id"),
                 "section_name": lib.get("Name"),
                 "counts": counts,
+                "section_type": section_type
             })
         return jsonify(formatted_libs)
     except Exception as e:
@@ -482,7 +538,7 @@ def get_activity():
         type: string
         required: true
         description: The data source to query.
-        enum: ['tautulli', 'jellystat']
+        enum: {activity_sources}
       - name: dateFormat
         in: query
         type: string
@@ -657,9 +713,11 @@ def get_activity():
         except Exception as e:
             log.error(f"Failed to fetch Tautulli activity: {e}")
             return jsonify({"error": "Failed to communicate with Tautulli."}), 502
-
     else:
         return jsonify({"error": f"Source '{source}' not supported for activity."}), 400
+
+get_activity.__doc__ = get_activity.__doc__.format(activity_sources=configured_activity_sources_list)
+
 
 # --- Debug Endpoints ---
 @debug_bp.route('/raw-data')
@@ -675,7 +733,7 @@ def get_raw_data():
         type: string
         required: true
         description: The data source to query.
-        enum: ['tautulli', 'jellystat', 'audiobookshelf']
+        enum: {debug_sources}
       - name: library_id
         in: query
         type: string
@@ -691,7 +749,6 @@ def get_raw_data():
     description: Fetches raw, unprocessed 'recently added' data for a specific library. This is intended for debugging and discovering available fields for the Mappings Editor.
     """
     source = request.args.get('source')
-    library_id = request.args.get('library_id')
 
     try:
         if source == 'tautulli':
@@ -699,6 +756,7 @@ def get_raw_data():
                 return jsonify({"error": "Tautulli not configured"}), 500
 
             # Fetch both the raw 'recently_added' and the detailed 'metadata' to show the complete picture.
+            library_id = request.args.get('library_id')
             # This matches the data enrichment process used by the main /api/data endpoint.
             ra_params = {"apikey": TAUTULLI_API_KEY, "cmd": "get_recently_added", "section_id": library_id, "count": 5} # Keep this count low for debugging
             ra_response = requests.get(f"{TAUTULLI_URL}/api/v2", params=ra_params, timeout=REQUEST_TIMEOUT)
@@ -718,6 +776,7 @@ def get_raw_data():
 
         elif source == 'jellystat':
             if not JELLYSTAT_URL or not JELLYSTAT_API_KEY: return jsonify({"error": "Jellystat not configured"}), 500
+            library_id = request.args.get('library_id')
             base_url = _get_jellystat_base_url()
             params = {'libraryid': library_id, 'limit': 5}
             response = requests.get(f"{base_url}/api/getRecentlyAdded", headers=_get_jellystat_headers(), params=params, timeout=REQUEST_TIMEOUT)
@@ -749,12 +808,18 @@ def get_raw_data():
 
         elif source == 'audiobookshelf':
             if not AUDIOBOOKSHELF_URL or not AUDIOBOOKSHELF_API_KEY: return jsonify({"error": "Audiobookshelf not configured"}), 500
+            library_id = request.args.get('library_id')
             response = requests.get(f"{AUDIOBOOKSHELF_URL}/api/libraries/{library_id}/items?sort=addedAt-desc&limit=5", headers=_get_audiobookshelf_headers(), timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             return jsonify(response.json().get('results', []))
 
     except Exception as e:
         return jsonify({"error": f"Failed to fetch raw data from {source}: {e}"}), 502
+get_raw_data.__doc__ = get_raw_data.__doc__.format(debug_sources=configured_debug_sources_list)
+
+
+# Import and register blueprints after all routes and configurations are defined
+from editor import editor_bp
 
 # Register blueprints after all routes have been defined
 app.register_blueprint(debug_bp, url_prefix='/api/debug')
@@ -1015,7 +1080,7 @@ def get_counts():
         type: string
         required: true
         description: The data source to query.
-        enum: ['tautulli', 'jellystat', 'audiobookshelf']
+        enum: {main_sources}
     responses:
       200:
         description: A dictionary of libraries and their media counts.
@@ -1024,7 +1089,7 @@ def get_counts():
           additionalProperties:
             type: object
             properties:
-              counts: {type: object, example: {Movies: 1234}}
+              counts: {{type: 'object', example: {{'Movies': 1234}}}}
       400:
         description: The 'source' query parameter is missing.
       503:
@@ -1046,6 +1111,8 @@ def get_counts():
     }
     return jsonify(counts_data)
 
+get_counts.__doc__ = get_counts.__doc__.format(main_sources=configured_main_sources_list)
+
 @app.route('/api/added', methods=['GET'])
 def get_added():
     """
@@ -1059,7 +1126,7 @@ def get_added():
         type: string
         required: true
         description: The data source to query.
-        enum: ['tautulli', 'jellystat', 'audiobookshelf']
+        enum: {main_sources}
       - name: dateFormat
         in: query
         type: string
@@ -1185,3 +1252,5 @@ def prime_and_start_cache_threads(is_refresh=False):
 _all_data_cache["data"] = {}
 _all_data_cache["timestamp"] = {}
 prime_and_start_cache_threads()
+
+get_added.__doc__ = get_added.__doc__.format(main_sources=configured_main_sources_list)
