@@ -14,6 +14,8 @@
         .btn-primary:hover { background-color: #3182ce; }
         .btn-secondary { background-color: #667eea; }
         .btn-secondary:hover { background-color: #5a67d8; }
+        .btn-danger { background-color: #c53030; }
+        .btn-danger:hover { background-color: #9b2c2c; }
         input, textarea, select { background-color: #4a5568; }
         select {
             -webkit-appearance: none;
@@ -204,6 +206,26 @@
                 document.getElementById('mappings-nav-links').innerHTML = navHtml;
             };
 
+            const updateAvailableFields = () => {
+                const activeItem = editorPanel.querySelector('.mapping-item');
+                if (!activeItem) return;
+
+                const source = activeItem.dataset.source;
+                const group = activeItem.dataset.group;
+                const type = activeItem.dataset.type;
+                const config = currentMappings[source]?.[group]?.[type];
+                if (!config) return;
+
+                const fieldsHtml = config.fields.map(field =>
+                    `<span class="field-tag inline-block rounded-full px-3 py-1 text-sm font-semibold mr-2 mb-2" data-field="${field}">{${field}}</span>`
+                ).join('');
+
+                const container = document.getElementById('available-fields-container');
+                if (container) {
+                    container.innerHTML = fieldsHtml;
+                }
+            };
+
             const buildEditorPanel = (source, group, type, config) => {
                 // First, save any pending changes from the currently displayed editor
                 updateMappingsFromUI();
@@ -211,7 +233,7 @@
                 const fieldsHtml = config.fields.map(field =>
                     `<span class="field-tag inline-block rounded-full px-3 py-1 text-sm font-semibold mr-2 mb-2" data-field="${field}">{${field}}</span>`
                 ).join('');
-                
+
                 const groupTitle = group.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                 let editorTitle = type;
                 if (editorTitle.startsWith('activity_')) {
@@ -223,12 +245,17 @@
                                     <h3 class="text-xl font-semibold capitalize mb-4">${formattedTitle}</h3>`;
                 
                 if (config.templates && typeof config.templates === 'object') {
+                    editorHtml += '<div id="templates-container">';
                     for (const [templateKey, templateValue] of Object.entries(config.templates)) {
-                        editorHtml += `<div class="mb-4">
-                                         <label class="block text-sm font-medium text-gray-300 mb-1 capitalize">${templateKey}:</label>
-                                         <input type="text" class="template-input w-full p-2 rounded font-mono" data-template-key="${templateKey}" value="${templateValue}">
+                        editorHtml += `<div class="template-item flex items-center gap-2 mb-2">
+                                         <input type="text" class="template-key w-1/3 p-2 rounded font-mono" value="${templateKey}" placeholder="Template Name">
+                                         <input type="text" class="template-value template-input w-2/3 p-2 rounded font-mono" data-template-key="${templateKey}" value="${templateValue}" placeholder="Template String">
+                                         <button class="remove-template btn-danger px-3 py-1 rounded text-white font-bold">X</button>
                                        </div>`;
                     }
+                    editorHtml += '</div>';
+                    editorHtml += '<button id="add-template" class="btn btn-secondary mt-2">Add Template</button>';
+
                 } else {
                     editorHtml += `<div class="mb-4">
                                      <label class="block text-sm font-medium text-gray-300 mb-1">Template:</label>
@@ -238,7 +265,7 @@
 
                 editorHtml += `<div class="mt-4">
                                  <p class="text-sm text-gray-400 mb-2">Available fields (click to insert):</p>
-                                 <div class="flex flex-wrap">${fieldsHtml}</div>
+                                 <div id="available-fields-container" class="flex flex-wrap">${fieldsHtml}</div>
                              </div>
                            </div>`;
 
@@ -304,14 +331,22 @@
                 const group = activeItem.dataset.group;
 
                 if (currentMappings[source] && currentMappings[source][group] && currentMappings[source][group][type]) {
-                    const templateInputs = activeItem.querySelectorAll('.template-input');
-                    if (templateInputs.length > 1 || (templateInputs.length === 1 && templateInputs[0].dataset.templateKey)) {
-                        templateInputs.forEach(input => {
-                            const key = input.dataset.templateKey;
-                            currentMappings[source][group][type].templates[key] = input.value;
+                    const templatesContainer = activeItem.querySelector('#templates-container');
+                    if (templatesContainer) {
+                        const newTemplates = {};
+                        templatesContainer.querySelectorAll('.template-item').forEach(item => {
+                            const key = item.querySelector('.template-key').value;
+                            const value = item.querySelector('.template-value').value;
+                            if (key) {
+                                newTemplates[key] = value;
+                            }
                         });
-                    } else if (templateInputs.length === 1) {
-                        currentMappings[source][group][type].template = templateInputs[0].value;
+                        currentMappings[source][group][type].templates = newTemplates;
+                    } else {
+                        const templateInput = activeItem.querySelector('.template-input');
+                        if (templateInput) {
+                            currentMappings[source][group][type].template = templateInput.value;
+                        }
                     }
                 }
             };
@@ -451,6 +486,12 @@
                         else if (type === 'book') libraryTypes.book.push(lib);
                     });
 
+                    const mediaTypeMap = {
+                        'tautulli': { 'movie': 'movie', 'show': 'episode', 'artist': 'album' },
+                        'jellystat': { 'movie': 'Movie', 'show': 'Episode', 'artist': 'Audio', 'book': 'Book' },
+                        'audiobookshelf': { 'book': 'book' }
+                    };
+
                     let html = `
                         <div class="mb-4">
                             <label for="generator-date-format" class="block font-semibold mb-2">Date Format:</label>
@@ -464,12 +505,25 @@
                             html += `<div class="p-4 rounded-lg" style="background-color: #4a5568;">
                                 <h4 class="text-lg font-bold capitalize mb-2">${type} Libraries</h4>`;
                             libs.forEach(lib => {
-                                html += `<div class="flex items-center justify-between py-1" data-library-name="${lib.section_name}" data-library-type="${type}">
-                                    <span>${lib.section_name}</span>
-                                    <div class="flex items-center space-x-4">
-                                        <label class="flex items-center"><input type="checkbox" class="generator-include mr-2"> Include</label>
-                                        <label class="flex items-center"><input type="checkbox" class="generator-counts mr-2"> Counts</label>
-                                        <label class="flex items-center">Limit: <input type="number" value="5" min="1" max="15" class="generator-limit w-16 ml-2 p-1 rounded text-center"></label>
+                                const mediaType = mediaTypeMap[source]?.[type];
+                                const mapping = currentMappings[source]?.['recently_added']?.[mediaType];
+                                const templateKeys = mapping?.templates ? Object.keys(mapping.templates) : ['title'];
+                                const allOptions = [...templateKeys, 'added_at'];
+                                const nameOptions = allOptions.map(k => `<option value="${k}" ${k === 'title' ? 'selected' : ''}>${k}</option>`).join('');
+                                const labelOptions = allOptions.map(k => `<option value="${k}" ${k === 'added_at' ? 'selected' : ''}>${k}</option>`).join('');
+
+                                html += `<div class="py-2 border-b border-gray-600" data-library-name="${lib.section_name}" data-library-type="${type}">
+                                    <div class="flex items-center justify-between">
+                                        <span>${lib.section_name}</span>
+                                        <div class="flex items-center space-x-4">
+                                            <label class="flex items-center"><input type="checkbox" class="generator-include mr-2"> Include</label>
+                                            <label class="flex items-center"><input type="checkbox" class="generator-counts mr-2"> Counts</label>
+                                            <label class="flex items-center">Limit: <input type="number" value="5" min="1" max="15" class="generator-limit w-16 ml-2 p-1 rounded text-center"></label>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-4 mt-2">
+                                        <label>Left-Side: <select class="generator-name-mapping p-2 pr-10 rounded" style="background-color: #2d3748;">${nameOptions}</select></label>
+                                        <label>Right-Side: <select class="generator-label-mapping p-2 pr-10 rounded" style="background-color: #2d3748;">${labelOptions}</select></label>
                                     </div>
                                 </div>`;
                             });
@@ -510,13 +564,30 @@
                         await buildRecentlyAddedOptions(source);
                     } else if (generatorType === 'user-activity') {
                         if (source === 'tautulli' || source === 'jellystat') {
+                            const activityMappings = currentMappings[source]?.['user_activity'];
+                            let templateKeys = ['user', 'title']; // default
+                            if (activityMappings) {
+                                const firstMapping = Object.values(activityMappings)[0];
+                                if (firstMapping?.templates) {
+                                    templateKeys = Object.keys(firstMapping.templates);
+                                }
+                            }
+                            const nameOptions = templateKeys.map(k => `<option value="${k}" ${k === 'user' ? 'selected' : ''}>${k}</option>`).join('');
+                            const labelOptions = templateKeys.map(k => `<option value="${k}" ${k === 'title' ? 'selected' : ''}>${k}</option>`).join('');
+
                             optionsContainer.innerHTML = `<div class="p-4 rounded-lg" style="background-color: #4a5568;">
                                 <h4 class="text-lg font-bold capitalize mb-2">Activity Widget</h4>
-                                <div class="flex items-center justify-between py-1" data-activity-widget>
-                                    <span>User Activity</span>
-                                    <div class="flex items-center space-x-4">
-                                        <label class="flex items-center"><input type="checkbox" class="generator-include-activity mr-2"> Include</label>
-                                        <label class="flex items-center">Limit: <input type="number" value="5" min="1" max="25" class="generator-limit-activity w-16 ml-2 p-1 rounded text-center"></label>
+                                <div data-activity-widget>
+                                    <div class="flex items-center justify-between py-1">
+                                        <span>User Activity</span>
+                                        <div class="flex items-center space-x-4">
+                                            <label class="flex items-center"><input type="checkbox" class="generator-include-activity mr-2"> Include</label>
+                                            <label class="flex items-center">Limit: <input type="number" value="5" min="1" max="25" class="generator-limit-activity w-16 ml-2 p-1 rounded text-center"></label>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-4 mt-2">
+                                        <label>Left-Side: <select class="generator-name-mapping p-2 pr-10 rounded" style="background-color: #2d3748;">${nameOptions}</select></label>
+                                        <label>Right-Side: <select class="generator-label-mapping p-2 pr-10 rounded" style="background-color: #2d3748;">${labelOptions}</select></label>
                                     </div>
                                 </div>
                             </div>`;
@@ -546,6 +617,8 @@
                         const libType = libRow.dataset.libraryType;
                         const withCounts = libRow.querySelector('.generator-counts').checked;
                         const limit = libRow.querySelector('.generator-limit').value;
+                        const nameMapping = libRow.querySelector('.generator-name-mapping').value;
+                        const labelMapping = libRow.querySelector('.generator-label-mapping').value;
                         
                         hasRecentlyAddedContent = true;
                         let icon;
@@ -569,8 +642,8 @@
             display: dynamic-list
             mappings:
               items: ${libName}.items
-              name: title
-              label: added_at
+              name: ${nameMapping}
+              label: ${labelMapping}
               limit: ${limit}`;
 
                         let countsWidget = '';
@@ -647,6 +720,8 @@
                         const includeActivity = activityRow.querySelector('.generator-include-activity').checked;
                         if (includeActivity) {
                             const limit = activityRow.querySelector('.generator-limit-activity').value;
+                            const nameMapping = activityRow.querySelector('.generator-name-mapping').value;
+                            const labelMapping = activityRow.querySelector('.generator-label-mapping').value;
                             activityYaml = `
 - Activity:
     - Activity:
@@ -656,8 +731,8 @@
             display: dynamic-list
             mappings:
               items:
-              name: user
-              label: title
+              name: ${nameMapping}
+              label: ${labelMapping}
               limit: ${limit}
 `;
                         }
@@ -720,8 +795,52 @@
 
             // Save changes to the in-memory object whenever the user types
             editorPanel.addEventListener('input', (e) => {
-                if (e.target.classList.contains('template-input')) {
+                if (e.target.classList.contains('template-input') || e.target.classList.contains('template-key') || e.target.classList.contains('template-value')) {
                     updateMappingsFromUI();
+                }
+            });
+
+            editorPanel.addEventListener('click', (e) => {
+                if (e.target.id === 'add-template') {
+                    const container = document.getElementById('templates-container');
+                    const newItem = document.createElement('div');
+                    newItem.className = 'template-item flex items-center gap-2 mb-2';
+                    newItem.innerHTML = `
+                        <input type="text" class="template-key w-1/3 p-2 rounded font-mono" placeholder="Template Name">
+                        <input type="text" class="template-value template-input w-2/3 p-2 rounded font-mono" placeholder="Template String">
+                        <button class="remove-template btn-danger px-3 py-1 rounded text-white font-bold">X</button>
+                    `;
+                    container.appendChild(newItem);
+                }
+
+                if (e.target.classList.contains('remove-template')) {
+                    e.target.closest('.template-item').remove();
+                    updateMappingsFromUI();
+                }
+
+                if (e.target.classList.contains('field-tag')) {
+                    e.preventDefault(); // Prevent loss of focus from the input
+                    const field = e.target.textContent;
+                    const mappingItem = editorPanel.querySelector('.mapping-item');
+
+                    // Determine the correct input to target. Use the last focused input if it's
+                    // within the current mapping item, otherwise fall back to the first input.
+                    let input = null;
+                    if (lastFocusedInput && mappingItem.contains(lastFocusedInput)) {
+                        input = lastFocusedInput;
+                    } else {
+                        input = mappingItem.querySelector('.template-input');
+                    }
+
+                    if (!input) return;
+                    
+                    // Insert the field at the current cursor position in the determined input
+                    const start = input.selectionStart;
+                    const end = input.selectionEnd;
+                    const text = input.value;
+                    input.value = text.substring(0, start) + field + text.substring(end);
+                    input.focus();
+                    input.selectionStart = input.selectionEnd = start + field.length;
                 }
             });
 

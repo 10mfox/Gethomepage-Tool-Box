@@ -147,17 +147,22 @@ def _process_jellystat_items(items):
     """Helper function to process raw Jellystat items into a consistent format."""
     processed_items = []
     for item in items:
-        display_title = mapping_manager.apply_mapping(item, 'jellystat', item.get('Type', ''))
+        # Determine the item type. For books, the 'Type' field is often missing.
+        item_type = item.get('Type')
+        if not item_type:
+            if 'BookName' in item:
+                item_type = 'Book'
+            else:
+                item_type = 'Unknown' # Fallback
+        formatted_fields = mapping_manager.apply_mapping(item, 'jellystat', item_type)
         # Jellystat provides date as a string 'YYYY-MM-DDTHH:MM:SSZ'
         added_at_str = item.get('DateCreated')
         added_at_ts = 0
         if added_at_str:
             added_at_ts = int(datetime.fromisoformat(added_at_str.replace('Z', '+00:00')).timestamp())
 
-        processed_items.append({
-            'title': display_title,
-            'added_at': added_at_ts
-        })
+        processed_item = {**formatted_fields, 'added_at': added_at_ts}
+        processed_items.append(processed_item)
     return processed_items
 
 # --- Audiobookshelf Functions ---
@@ -179,11 +184,12 @@ def _process_audiobookshelf_items(items):
         flattened_data['genre'] = genres[0] if genres else ''
         
         # Pass all the flattened data to the mapping function
-        display_title = mapping_manager.apply_mapping(flattened_data, 'audiobookshelf', 'book')
-        processed_items.append({
-            'title': display_title,
+        formatted_fields = mapping_manager.apply_mapping(flattened_data, 'audiobookshelf', 'book')
+        processed_item = {
+            **formatted_fields,
             'added_at': int(item.get('addedAt', 0)) // 1000 # Convert from milliseconds to seconds
-        })
+        }
+        processed_items.append(processed_item)
     return processed_items
 
 # --- Tautulli Functions (Modified for clarity) ---
@@ -583,18 +589,18 @@ def get_activity():
                 if not session.get('NowPlayingItem'): continue
                 active_user_ids.add(session.get('UserId'))
                 now_playing = session.get('NowPlayingItem', {})
-                play_state = session.get('PlayState', {})
-                transcoding_info = session.get('TranscodingInfo') or {} # Ensure transcoding_info is a dict
-                full_session_data = {**session, **now_playing, **play_state, **transcoding_info}
+                
+                # Create a comprehensive dictionary with all data for the session.
+                # This ensures all fields are available for mapping.
+                full_session_data = {**session, **now_playing, **session.get('PlayState', {}), **(session.get('TranscodingInfo') or {})}
 
-                if play_state.get('IsPaused'):
-                    full_session_data['status'] = "Paused"
-                    full_session_data['status_dot'] = '🟡'
+                if full_session_data.get('IsPaused'):
+                    full_session_data.update({'status': "Paused", 'status_dot': '🟡'})
                 else:
-                    full_session_data['status'] = "Playing"
-                    full_session_data['status_dot'] = '🟢'
+                    full_session_data.update({'status': "Playing", 'status_dot': '🟢'})
 
-                position_ticks, runtime_ticks = play_state.get('PositionTicks', 0), now_playing.get('RunTimeTicks', 0)
+                position_ticks = full_session_data.get('PositionTicks', 0)
+                runtime_ticks = full_session_data.get('RunTimeTicks', 0)
                 full_session_data['PositionTicks_hhmmss'], full_session_data['RunTimeTicks_hhmmss'] = _ticks_to_hhmmss(position_ticks), _ticks_to_hhmmss(runtime_ticks)
 
                 # Ensure CompletionPercentage is always available, calculating it if necessary.
@@ -674,18 +680,17 @@ def get_activity():
             playing_items, last_played_items, active_user_ids = [], [], set()
             for session in sorted(sessions, key=lambda s: s.get('state', 'z')):
                 active_user_ids.add(str(session.get('user_id')))
+                
+                # Add status and status_dot directly to the session dictionary
                 state = session.get('state', 'unknown').lower()
-                if state == 'playing':
-                    session['status_dot'] = '🟢'
-                elif state == 'paused':
-                    session['status_dot'] = '🟡'
-                else:
-                    session['status_dot'] = '⚪' # for buffering, etc.
+                status_map = {'playing': '🟢', 'paused': '🟡'}
+                session['status_dot'] = status_map.get(state, '⚪') # Default to white for buffering, etc.
                 session['status'] = state.capitalize()
 
                 # Add formatted time fields similar to Jellystat
                 duration_ms = session.get('duration', 0)
                 view_offset_ms = session.get('view_offset', 0)
+                # These new fields will be available in the mapping templates
                 session['duration_hhmmss'] = _ms_to_hhmmss(duration_ms)
                 session['view_offset_hhmmss'] = _ms_to_hhmmss(view_offset_ms)
 
@@ -700,10 +705,12 @@ def get_activity():
                     latest_history_by_user[user_id] = item
 
             for user_id, last_played in latest_history_by_user.items():
+                # Add status fields *before* applying the mapping
                 last_played['status'], last_played['status_dot'] = 'Last Played', '🔴'
                 stopped_timestamp = last_played.get('stopped', 0)
                 if stopped_timestamp and date_format:
                     format_last_played_date(last_played, date_format, now)
+                
                 formatted_parts = mapping_manager.apply_activity_mapping(last_played, 'tautulli', 'last_played_activity')
                 last_played_items.append({"title": formatted_parts.get('title', 'Unknown Title'), "user": formatted_parts.get('user', 'Unknown User'), "stopped": stopped_timestamp})
 
@@ -898,50 +905,66 @@ def _fetch_all_jellystat_data_concurrently():
     """Internal function to fetch all Jellystat data concurrently."""
     base_url = _get_jellystat_base_url()
     headers = _get_jellystat_headers()
-
-    # 1. Fetch libraries and stats concurrently
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        libs_future = executor.submit(requests.get, f"{base_url}/api/getLibraries", headers=headers, timeout=REQUEST_TIMEOUT)
-        stats_future = executor.submit(requests.get, f"{base_url}/stats/getLibraryOverview", headers=headers, timeout=REQUEST_TIMEOUT)
-        all_libraries = libs_future.result().json()
-        stats = stats_future.result().json()
-
+    
+    # 1. Fetch all libraries from /api/getLibraries as the source of truth.
+    libs_response = requests.get(f"{base_url}/api/getLibraries", headers=headers, timeout=REQUEST_TIMEOUT)
+    libs_response.raise_for_status()
+    # Filter out archived libraries, as Jellystat keeps them in the API response after deletion.
+    all_libraries = [lib for lib in libs_response.json() if not lib.get('archived')]
+    
+    # 2. Fetch library stats to get the counts.
+    stats_response = requests.get(f"{base_url}/stats/getLibraryOverview", headers=headers, timeout=REQUEST_TIMEOUT)
+    stats_response.raise_for_status()
+    stats_data = {stat['Id']: stat for stat in stats_response.json()}
+    
     data_by_library = {}
     for lib in all_libraries:
         section_name = lib.get('Name')
         if section_name:
-            stat_details = next((s for s in stats if s['Id'] == lib.get('Id')), None)
+            stat_details = stats_data.get(lib.get('Id'))
             counts = {}
+            collection_type = lib.get('CollectionType', 'unknown').lower()
+            # Check if stat_details exists, as it might not for archived libraries
             if stat_details:
-                collection_type = stat_details.get('CollectionType')
                 if collection_type == 'tvshows':
-                    counts['Shows'] = stat_details.get('Library_Count')
-                    counts['Seasons'] = stat_details.get('Season_Count')
-                    counts['Episodes'] = stat_details.get('Episode_Count')
+                    counts['Shows'] = stat_details.get('Library_Count', 0)
+                    counts['Seasons'] = stat_details.get('Season_Count', 0)
+                    counts['Episodes'] = stat_details.get('Episode_Count', 0)
                 elif collection_type == 'movies':
-                    counts['Movies'] = stat_details.get('Library_Count')
+                    counts['Movies'] = stat_details.get('Library_Count', 0)
                 elif collection_type == 'music':
-                    counts['Tracks'] = stat_details.get('Library_Count')
+                    counts['Tracks'] = stat_details.get('Library_Count', 0)
+                elif collection_type == 'musicvideos':
+                    counts['Music Videos'] = stat_details.get('Library_Count', 0)
+                elif collection_type == 'homevideos':
+                    counts['Home Videos'] = stat_details.get('Library_Count', 0)
+                elif collection_type == 'photos':
+                    counts['Photos'] = stat_details.get('Library_Count', 0)
+                elif collection_type == 'boxsets':
+                    counts['Items'] = stat_details.get('Library_Count', 0)
+                elif collection_type == 'books':
+                    counts['Books'] = stat_details.get('Library_Count', 0)
+                else: # Fallback for other types
+                    counts['Items'] = stat_details.get('Library_Count', 0)
             data_by_library[section_name] = {'items': [], 'counts': counts}
 
     def fetch_for_library(library):
         """Fetch raw recently added items for a single library."""
         try:
-            params = {'libraryid': library['Id'], 'limit': 15} # Keep this count low for performance
+            params = {'libraryid': library.get('Id'), 'limit': 15} # Use 'Id' from /api/getLibraries
             response = requests.get(f"{base_url}/api/getRecentlyAdded", headers=headers, params=params, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             return library.get('Name'), response.json()
         except Exception as e:
             log.warning(f"Error fetching Jellystat recently added for library {library.get('Name')}: {e}")
             return library.get('Name'), []
-
-    # 2. Fetch all 'recently_added' data sequentially to avoid overwhelming Jellystat.
-    # Jellystat appears to be sensitive to concurrent requests.
+    
+    # 3. Fetch 'recently added' for each library.
     results = []
     for library in all_libraries:
         results.append(fetch_for_library(library))
-
-    # 3. Process all results
+    
+    # 4. Process all results
     for library_name, raw_items in results:
         if library_name in data_by_library and raw_items:
             # Store raw items; processing will happen on-demand.
@@ -956,8 +979,8 @@ def _get_jellystat_library_state():
         response = requests.get(f"{base_url}/stats/getLibraryOverview", headers=_get_jellystat_headers(), timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         stats = response.json()
-        # Create a state signature from library counts
-        return {stat['Id']: stat.get('Library_Count', 0) for stat in stats}
+        # Create a more robust state signature from library IDs, names, and counts.
+        return {stat['Id']: f"{stat.get('Name')}-{stat.get('Library_Count', 0)}" for stat in stats}
     except Exception as e:
         log.warning(f"Jellystat state check: Could not fetch library state: {e}")
         return None
@@ -1177,8 +1200,9 @@ def get_added():
 
         if source == 'tautulli':
             for item in raw_items:
-                formatted_title = mapping_manager.apply_mapping(item, 'tautulli', item.get('media_type', ''))
-                processed_items.append({'title': formatted_title, 'added_at': int(item.get('added_at', 0))})
+                formatted_fields = mapping_manager.apply_mapping(item, 'tautulli', item.get('media_type', ''))
+                processed_item = {**formatted_fields, 'added_at': int(item.get('added_at', 0))}
+                processed_items.append(processed_item)
         elif source == 'jellystat':
             processed_items = _process_jellystat_items(raw_items)
         elif source == 'audiobookshelf':
