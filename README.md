@@ -4,7 +4,7 @@ A powerful, fast, and efficient web-based tool to manage your self-hosted servic
 
 :arrow_right: **Click here to see my project roadmap**
 
-https://github.com/user-attachments/assets/4b0e2f1c-41ce-42bc-8e4e-82d149bb7e4e
+https://github.com/user-attachments/assets/30afe333-712b-468c-9506-4c3c38011ed8
 
 ## Features
 

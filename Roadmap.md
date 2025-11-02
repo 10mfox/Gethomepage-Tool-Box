@@ -16,10 +16,13 @@
     - [x] Live editor for all `gethomepage` configuration files (`/editor`).
     - [x] Visual CSS GUI editor for live theme customization (`/editor/css-gui`).
     - [x] Mappings editor for custom title formatting (`/editor/mappings`).
+        - [x] Added support for creating multiple custom templates for each media type.
     - [x] Raw data viewer for debugging and field discovery (`/editor/debug-raw`).
 - [x] Fixed Jellystat integration issues.
 - [x] Added optional environment variables (`ENABLE_CONFIG_EDITOR`, `ENABLE_DEBUG`) to simplify the default UI.
-- [x] Added YAML Widget Generator to Mappings Editor.
+- [x] **YAML Widget Generator**:
+    - [x] Added to Mappings Editor.
+    - [x] Added dropdowns to select templates for the left and right side of the widget.
 - [x] Ensured all sources stay up-to-date with background polling.
 
 ## Planned
