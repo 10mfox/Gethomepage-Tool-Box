@@ -1,5 +1,6 @@
 import os
 import mapping_manager
+import config_manager
 import requests
 from flask import Flask, render_template, request, jsonify, Blueprint
 from flasgger import Swagger, swag_from
@@ -18,8 +19,7 @@ swagger_template = {
     "info": {
         "title": "Media Manager & Homepage Tool-Box API",
         "title": "Gethomepage Tool-Box API Docs",
-        "description": "API for fetching media server data and managing configurations.",
-        "version": os.environ.get('VERSION', 'dev')
+        "description": "API for fetching media server data and managing configurations."
     },
     "definitions": {
         "Library": {
@@ -66,19 +66,21 @@ swagger = Swagger(app, template=swagger_template)
 # --- Debug Blueprint ---
 debug_bp = Blueprint('debug', __name__)
 
-# Read configuration from environment variables
-TAUTULLI_URL = os.environ.get('TAUTULLI_URL')
-TAUTULLI_API_KEY = os.environ.get('TAUTULLI_API_KEY')
-JELLYSTAT_URL = os.environ.get('JELLYSTAT_URL')
-JELLYSTAT_API_KEY = os.environ.get('JELLYSTAT_API_KEY')
-JELLYSTAT_CONTAINER_NAME = os.environ.get('JELLYSTAT_CONTAINER_NAME')
-VERSION = os.environ.get('VERSION', 'dev')
-AUDIOBOOKSHELF_URL = os.environ.get('AUDIOBOOKSHELF_URL')
-AUDIOBOOKSHELF_API_KEY = os.environ.get('AUDIOBOOKSHELF_API_KEY')
-POLL_INTERVAL_SECONDS = int(os.environ.get('POLL_INTERVAL', 15))
-REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', 30))
-ENABLE_CONFIG_EDITOR = os.environ.get('ENABLE_CONFIG_EDITOR', 'false').lower() == 'true'
-ENABLE_DEBUG = os.environ.get('ENABLE_DEBUG', 'false').lower() == 'true'
+
+# Read configuration using the new manager
+TAUTULLI_URL = config_manager.get_config('TAUTULLI_URL')
+TAUTULLI_API_KEY = config_manager.get_config('TAUTULLI_API_KEY')
+JELLYSTAT_URL = config_manager.get_config('JELLYSTAT_URL')
+JELLYSTAT_API_KEY = config_manager.get_config('JELLYSTAT_API_KEY')
+JELLYSTAT_CONTAINER_NAME = config_manager.get_config('JELLYSTAT_CONTAINER_NAME')
+AUDIOBOOKSHELF_URL = config_manager.get_config('AUDIOBOOKSHELF_URL')
+AUDIOBOOKSHELF_API_KEY = config_manager.get_config('AUDIOBOOKSHELF_API_KEY')
+POLL_INTERVAL_SECONDS = config_manager.get_config('POLL_INTERVAL', 15, type_cast=int)
+REQUEST_TIMEOUT = config_manager.get_config('REQUEST_TIMEOUT', 30, type_cast=int)
+ENABLE_CONFIG_EDITOR = config_manager.get_config('ENABLE_CONFIG_EDITOR', 'false', type_cast=bool)
+ENABLE_DEBUG = config_manager.get_config('ENABLE_DEBUG', 'false', type_cast=bool)
+VERSION = config_manager.get_config('VERSION', 'dev')
+swagger_template['info']['version'] = VERSION
 
 # --- Global Source Configuration Check ---
 any_source_configured = (
@@ -236,7 +238,7 @@ def _get_date_format_from_request():
 @app.route('/')
 def index():
     if not any_source_configured:
-        homepage_url = os.environ.get('HOMEPAGE_PREVIEW_URL', '')
+        homepage_url = config_manager.get_config('HOMEPAGE_PREVIEW_URL', '')
         return render_template('css-gui.html', homepage_preview_url=homepage_url, any_source_configured=any_source_configured, enable_config_editor=ENABLE_CONFIG_EDITOR, enable_debug=ENABLE_DEBUG)
     return render_template('index.html', any_source_configured=any_source_configured, enable_config_editor=ENABLE_CONFIG_EDITOR, enable_debug=ENABLE_DEBUG)
 
