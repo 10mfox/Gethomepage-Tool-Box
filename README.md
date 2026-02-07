@@ -64,8 +64,6 @@ services:
       - redis
     ports:
       - "5000:5000" # Map host port 5000 to container port 5000
-    env_file:
-      - .env
     restart: unless-stopped
     volumes:
       # Mount your local gethomepage config folder into the container
